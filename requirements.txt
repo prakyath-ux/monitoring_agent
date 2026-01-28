@@ -1,0 +1,13 @@
+# Local Directory Monitoring Agent - Dependencies
+
+# File system monitoring
+watchdog>=3.0.0
+
+# Claude API client
+anthropic>=0.18.0
+
+# YAML config parsing
+pyyaml>=6.0
+
+# Load .env files
+python-dotenv>=1.0.0

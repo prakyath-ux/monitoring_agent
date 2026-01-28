@@ -1,0 +1,23 @@
+# Environment variables (API keys)
+.env
+.env.local
+.env.*.local
+
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Agent logs (can contain sensitive code)
+.agent/logs/
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
