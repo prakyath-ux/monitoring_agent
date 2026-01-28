@@ -32,7 +32,7 @@ CONFIG_FILE = f"{AGENT_DIR}/config.yaml"
 STANDARDS_FILE = f"{AGENT_DIR}/standards.md"
 IGNORE_FILE = f"{AGENT_DIR}/ignore.yaml"
 PID_FILE = f"{AGENT_DIR}/.pid"
-
+PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
 
 def load_config():
     """ Load agent configuration form .agents/config.yaml """
@@ -70,6 +70,13 @@ def load_standards():
     if Path(STANDARDS_FILE).exists():
         return Path(STANDARDS_FILE).read_text()
     return "No company standards defined"
+
+def load_purpose():
+    """ Load repository purpose from .agent/purpose.md """
+
+    if Path(PURPOSE_FILE).exists():
+        return Path(PURPOSE_FILE).read_text()
+    return "No repository purpose defined"
 
 def should_ignore(path, ignore_patterns):
     """ Check if a path should be ignored """
@@ -259,8 +266,13 @@ class ReportEngine:
         if not logs.strip():
             print("No activity logs found.")
             return None
+        
+        purpose = load_purpose()
 
         prompt = f"""You are a code review agent analyzing a developer's activity.
+
+## Repository Purpose
+{purpose}
 
 ## Company Coding Standards
 {standards}
@@ -273,8 +285,9 @@ Analyze the developer's activity and generate a report with:
 
 1. **Summary**: Overview of what was worked on
 2. **Activity Timeline**: Key actions in chronological order
-3. **Issues Detected**: Any problems, bugs, or standards violations you notice
-4. **Recommendations**: Suggestions for improvement
+3. **Alignment Check**: Do the changes align with the repository purpose? Flag any deviations.
+4. **Issues Detected**: Any problems, bugs, or standards violations you notice
+5. **Recommendations**: Suggestions for improvement
 
 Be specific, reference actual file names and code from the logs.
 Format the report in clean markdown.
@@ -343,12 +356,28 @@ def cmd_init():
         ]
         with open(IGNORE_FILE, "w") as f:
             yaml.dump(default_ignore, f, default_flow_style=False)
+
+    # Create default purpose.md
+    if not Path(PURPOSE_FILE).exists():
+        default_purpose = """# Repository Purpose
+
+## Mission
+[What is this project? One paragraph describing core intent]
+
+## Direction
+[Where is this project heading? List current and planned phases]
+
+## Deviation Signals
+[What changes would indicate scope creep or wrong direction?]
+"""
+        Path(PURPOSE_FILE).write_text(default_purpose)
     
     print(f"Initialized agent in {os.getcwd()}")
     print(f"  Created: {AGENT_DIR}/")
     print(f"  Created: {CONFIG_FILE}")
     print(f"  Created: {STANDARDS_FILE}")
     print(f"  Created: {IGNORE_FILE}")
+    print(f"  Created: {PURPOSE_FILE} ")
 
 def cmd_start():
     """Start the file watcher in background"""
