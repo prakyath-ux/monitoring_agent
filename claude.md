@@ -1,6 +1,7 @@
 # Local Directory Monitoring Agent
 
-> **Status: Research & Design Phase**
+> **Status: Phase 2 Complete**
+> **Last Updated: 29 January 2026**
 
 ## Project Vision
 
@@ -10,6 +11,73 @@ An **autonomous local AI agent** that runs on developer machines, monitors all f
 Dev works normally → Agent watches silently → Logs everything → Generate report anytime
 ```
 
+---
+
+## Phase 2 Completed (29 Jan 2026)
+
+### Initial Requirements (All Complete)
+
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | **purpose.md** - Define repo intent for deviation detection | Done |
+| 2 | **rules.yaml** - Machine-checkable coding rules | Done |
+| 3 | **scan command** - Build context from existing codebase | Done |
+| 4 | **check command** - Real-time rule validation on file changes | Done |
+| 5 | **AI source detection** - Identify if changes came from AI tools | Done |
+
+### Today's Wins
+
+**1. `check` Command System**
+- Validates codebase against `rules.yaml`
+- Detects: forbidden files, forbidden imports, forbidden patterns, file length, function length
+- Real-time checking during file monitoring
+- Clear violation output with file paths and line numbers
+
+**2. AI Source Detection System**
+- Cross-platform process detection (macOS/Linux/Windows)
+- Detects Claude Code, VS Code, Cursor
+- Bulk change heuristic (>10 lines = AI-generated)
+- Output examples:
+  - `(via VS Code)` - manual small edits
+  - `(via Claude Code (AI))` - AI bulk changes
+  - `(via Cursor (AI))` - Cursor AI changes
+
+---
+
+## Current Commands
+
+```bash
+python agent.py init       # Initialize .agent/ folder
+python agent.py start      # Start monitoring (foreground)
+python agent.py stop       # Stop monitoring
+python agent.py status     # Check if agent is running
+python agent.py report     # Generate AI report from logs
+python agent.py logs       # View recent activity logs
+python agent.py scan       # Scan existing codebase metadata
+python agent.py check      # Check codebase against rules.yaml
+```
+
+---
+
+## Architecture
+
+```
+my-project/
+├── agent.py              ← The monitoring agent (single file)
+├── .agent/               ← Agent's working directory
+│   ├── config.yaml       ← Settings (extensions, model, retention)
+│   ├── standards.md      ← Coding standards for reports
+│   ├── purpose.md        ← Repository mission & boundaries
+│   ├── rules.yaml        ← Machine-checkable rules
+│   ├── ignore.yaml       ← Patterns to ignore
+│   ├── scan.json         ← Codebase metadata snapshot
+│   ├── logs/             ← Activity logs (agent's memory)
+│   └── reports/          ← Generated reports
+└── src/                  ← Your actual code
+```
+
+---
+
 ## Design Decisions (Locked In)
 
 | Decision | Choice |
@@ -18,155 +86,50 @@ Dev works normally → Agent watches silently → Logs everything → Generate r
 | **Mode** | Continuous background monitoring |
 | **Memory** | Persistent logs of all file activity |
 | **Report** | On-demand, uses full logged context |
-| **Autonomy** | Auto-fix + meaningful report |
+| **Architecture** | Single file (agent.py) |
+| **Rule Checking** | Real-time + on-demand |
 
 ---
 
-## How It Works
+## Rules System (rules.yaml)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     DEV'S WORKING DIRECTORY                     │
-│                                                                 │
-│   my-project/                                                   │
-│   ├── agent.py              ← The monitoring agent              │
-│   ├── .agent/                                                   │
-│   │   ├── config.yaml       ← Settings                          │
-│   │   ├── standards.md      ← Company coding rules              │
-│   │   ├── ignore.yaml       ← Files/patterns to skip            │
-│   │   └── logs/             ← Activity logs (agent's memory)    │
-│   │       └── 2024-01-28.log                                    │
-│   └── src/                  ← Dev's actual code                 │
-│       └── ...                                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Agent Workflow
-
-```
-1. START AGENT
-   └── python agent.py start
-   └── Agent begins watching directory silently
-
-2. DEV WORKS NORMALLY
-   └── Creates files, writes code, deletes files
-   └── Agent logs EVERYTHING in background
-
-3. GENERATE REPORT (when ready)
-   └── python agent.py report
-   └── Agent reads all logs (memory)
-   └── Sends context to Claude API
-   └── Generates comprehensive report
-
-4. STOP AGENT (optional)
-   └── python agent.py stop
-```
-
----
-
-## What Gets Logged (Agent Memory)
-
-The agent records:
-- File created / deleted / renamed
-- Content added / modified
-- Code diffs (before/after)
-- Timestamps for all actions
-- Error detections (syntax errors, etc.)
-
-Example log entry:
-```
-[10:25:42] FILE_MODIFIED: src/app.py
-           DIFF:
-           - print("hello")
-           + print("Hello, World!")
-```
-
----
-
-## Agent Components
-
-| Component | Purpose |
-|-----------|---------|
-| **File Watcher** | Monitors directory for all changes |
-| **Log Writer** | Records events with timestamps and diffs |
-| **Log Storage** | Persistent memory in `.agent/logs/` |
-| **Report Engine** | Reads logs + standards, calls Claude, generates report |
-
----
-
-## Commands
-
-```bash
-python agent.py start      # Start monitoring (background)
-python agent.py stop       # Stop monitoring
-python agent.py status     # Check if agent is running
-python agent.py report     # Generate report using logged context
-python agent.py logs       # View recent activity logs
-```
-
----
-
-## Report Generation
-
-When `python agent.py report` is triggered:
-
-1. Agent reads all logs from `.agent/logs/`
-2. Agent reads `.agent/standards.md` (company rules)
-3. Sends everything to Claude API as context
-4. Claude analyzes:
-   - What the dev has been working on
-   - Patterns in the code changes
-   - Potential issues or bugs
-   - Suggestions based on company standards
-5. Returns formatted report
-
----
-
-## Configuration Files
-
-### `.agent/config.yaml`
 ```yaml
-# Agent settings
-watch_extensions:
-  - .py
-  - .js
-  - .ts
-  - .java
-
-log_retention_days: 30
-model: claude-sonnet
-auto_start: false
+rules:
+  max_function_lines: 60
+  max_file_lines: 800
+  forbidden_imports:
+    - flask
+    - fastapi
+    - django
+    - sqlite3
+  forbidden_files:
+    - api.py
+    - server.py
+    - routes.py
+  forbidden_patterns:
+    - pattern: "password\\s*=\\s*['\"]"
+      message: "Hardcoded password detected"
 ```
 
-### `.agent/standards.md`
-```markdown
-# Company Coding Standards
+---
 
-## Naming Conventions
-- Use camelCase for variables
-- Use PascalCase for classes
+## AI Detection Logic
 
-## Security
-- Never hardcode secrets
-- Sanitize all user input
-
-## Best Practices
-- Add error handling for async operations
-- Write docstrings for public functions
 ```
-
-### `.agent/ignore.yaml`
-```yaml
-# Don't monitor these
-- node_modules/
-- .git/
-- __pycache__/
-- .env
-- "*.log"
-- .agent/logs/   # Don't watch our own logs
+if Claude running + bulk change (>10 lines):
+    → "Claude Code (AI)"
+elif VS Code + bulk change:
+    → "VS Code (AI Tool)"
+elif VS Code:
+    → "VS Code"
+elif Cursor + bulk change:
+    → "Cursor (AI)"
+elif Cursor:
+    → "Cursor"
+elif bulk change only:
+    → "AI Tool (likely)"
+else:
+    → "Manual Edit"
 ```
 
 ---
@@ -177,16 +140,18 @@ auto_start: false
 |-----------|------------|
 | Language | Python 3.11+ |
 | File Watching | `watchdog` library |
-| LLM | Claude API (Anthropic) |
+| LLM | OpenAI API (GPT-4o) |
 | Config | YAML |
-| Logging | Custom + Python logging |
+| Architecture | Single file |
 
 ---
 
-## Next Steps (Research Phase)
+## Phase 3 Roadmap (Future)
 
-1. [ ] Build basic file watcher prototype
-2. [ ] Implement logging system
-3. [ ] Test Claude API integration for report generation
-4. [ ] Create CLI commands (start, stop, report)
-5. [ ] Test with real project directory
+| Feature | Purpose |
+|---------|---------|
+| Conflict detection | Identify when changes conflict with existing code |
+| Solution suggestions | Propose fixes for detected issues |
+| Auto-fix mode | Automatically apply safe fixes with approval |
+| Log source tracking | Store AI detection info in logs |
+| Report integration | Include AI vs manual breakdown in reports |

@@ -89,6 +89,54 @@ def load_rules():
             return yaml.safe_load(f)
     return None
 
+def detect_editor_source(file_path, diff_lines_added=0):
+    """Detect if change came from AI tool or manual edit (cross-platform)"""
+    import subprocess
+    import platform
+    
+    system = platform.system()
+    
+    def process_running(name):
+        try:
+            if system == "Windows":
+                result = subprocess.run(
+                    ['tasklist', '/FI', f'IMAGENAME eq {name}*'],
+                    capture_output=True, text=True, timeout=2
+                )
+                return name.lower() in result.stdout.lower()
+            else:
+                result = subprocess.run(
+                    ['pgrep', '-f', name],
+                    capture_output=True, text=True, timeout=2
+                )
+                return bool(result.stdout.strip())
+        except:
+            return False
+    
+    claude_running = process_running('claude')
+    cursor_running = process_running('Cursor')
+    vscode_running = process_running('Code')
+    is_bulk_change = diff_lines_added > 10
+    
+    if claude_running and is_bulk_change:
+        return "Claude Code (AI)"
+    elif vscode_running and is_bulk_change:
+        return "VS Code (AI Tool)"
+    elif vscode_running:
+        return "VS Code"
+    elif cursor_running and is_bulk_change:
+        return "Cursor (AI)"
+    elif cursor_running:
+        return "Cursor"
+    elif is_bulk_change:
+        return "AI Tool (likely)"
+    else:
+        return "Manual Edit"
+
+
+
+
+
 def scan_file(file_path):
     """ Extract metadata from a single file """
     try:
@@ -163,7 +211,28 @@ class LogWriter:
         today = datetime.now().strftime("%Y-%m-%d")
         return Path(LOGS_DIR) / f"{today}.log"
 
-    def write(self, event_type, path, content=None, diff=None):
+    # def write(self, event_type, path, content=None, diff=None):
+    #     """ Write a log entry """
+    #     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    #     log_file = self.get_log_file()
+
+    #     entry = f"\n{'='*80}\n"
+    #     entry += f"[{timestamp}] {event_type}\n"
+    #     entry += f"PATH: {path}\n"
+
+    #     if diff:
+    #         entry += f"DIFF:\n{diff}\n"
+    #     elif content:
+    #         entry += f"CONTENT:\n{content}\n"
+
+    #     entry += f"{'='*80}\n"
+
+    #     with open(log_file, "a") as f:
+    #         f.write(entry)
+        
+    #     print(f"[{timestamp} {event_type}: {path}]")
+
+    def write(self, event_type, path, content=None, diff=None, source=None):
         """ Write a log entry """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_file = self.get_log_file()
@@ -171,6 +240,8 @@ class LogWriter:
         entry = f"\n{'='*80}\n"
         entry += f"[{timestamp}] {event_type}\n"
         entry += f"PATH: {path}\n"
+        if source:
+            entry += f"SOURCE: {source}\n"
 
         if diff:
             entry += f"DIFF:\n{diff}\n"
@@ -181,8 +252,7 @@ class LogWriter:
 
         with open(log_file, "a") as f:
             f.write(entry)
-        
-        print(f"[{timestamp} {event_type}: {path}]")
+
 
 
 
@@ -240,6 +310,7 @@ class FileEventHandler(FileSystemEventHandler):
         
         new_content = self.get_file_content(event.src_path)
         old_content = self.file_contents.get(event.src_path, "")
+        
 
         # generate diff
         if old_content and new_content:
@@ -250,9 +321,18 @@ class FileEventHandler(FileSystemEventHandler):
             ))
         else:
             diff = None
+        
+                # Count lines added and detect source
+        lines_added = 0
+        if diff:
+            lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+        source = detect_editor_source(event.src_path, lines_added)
+
 
         self.file_contents[event.src_path] = new_content
-        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff)
+        # self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff)
+        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff, source=source)
+        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {event.src_path} (via {source})")
 
         # Real-time rule checking (silent on success)
         rules_data = load_rules()
@@ -279,14 +359,47 @@ class FileEventHandler(FileSystemEventHandler):
         """ Handle file rename/move """
         if event.is_directory:
             return
-        
+
         if not self.should_process(event.dest_path):
-            return 
-        
-        self.log_writer.write(
-            "FILE_RENAMED",
-            f"{event.src_path} -> {event.dest_path}"
-        )
+            return
+
+        # Get old and new content for diff
+        old_content = self.file_contents.get(event.dest_path, "")
+        new_content = self.get_file_content(event.dest_path)
+
+        # Generate diff
+        diff = None
+        if old_content and new_content:
+            diff = "\n".join(difflib.unified_diff(
+                old_content.splitlines(),
+                new_content.splitlines(),
+                lineterm=""
+            ))
+        elif new_content and not old_content:
+            # New file via rename - log full content as diff
+            diff = "\n".join(f"+{line}" for line in new_content.splitlines())
+
+        # Count lines added for source detection
+        lines_added = 0
+        if diff:
+            lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+        source = detect_editor_source(event.dest_path, lines_added)
+
+        self.file_contents[event.dest_path] = new_content
+        # self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff)
+        self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff, source=source)
+        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_RENAMED: {event.dest_path} (via {source})")
+
+        # Real-time rule checking for renamed files
+        rules_data = load_rules()
+        if rules_data and "rules" in rules_data:
+            violations = check_file(event.dest_path, rules_data["rules"])
+            if violations:
+                print(f"\n⚠️  VIOLATIONS in {event.dest_path}:")
+                for v in violations:
+                    print(f"   └── {v['type']}: {v['message']}")
+
+
 
 
 # ====================================== REPORT ENGINE ======================================
