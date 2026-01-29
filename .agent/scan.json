@@ -1,0 +1,132 @@
+{
+  "scanned_at": "2026-01-29T11:04:36.999196",
+  "files": {
+    "./agent.py": {
+      "path": "./agent.py",
+      "lines": 672,
+      "functions": [
+        "load_config",
+        "load_ignore_patterns",
+        "load_standards",
+        "load_purpose",
+        "scan_file",
+        "load_scan",
+        "should_ignore",
+        "__init__",
+        "get_log_file",
+        "write",
+        "__init__",
+        "should_process",
+        "get_file_content",
+        "on_created",
+        "on_modified",
+        "on_deleted",
+        "on_moved",
+        "__init__",
+        "read_all_logs",
+        "generate_report",
+        "cmd_init",
+        "cmd_start",
+        "shutdown",
+        "cmd_stop",
+        "cmd_status",
+        "cmd_report",
+        "cmd_logs",
+        "cmd_scan",
+        "main"
+      ],
+      "classes": [
+        "LogWriter",
+        "FileEventHandler",
+        "ReportEngine"
+      ],
+      "imports": [
+        "import os",
+        "import sys",
+        "import time",
+        "import signal",
+        "import argparse",
+        "from datetime import datetime",
+        "from pathlib import Path",
+        "import difflib",
+        "import yaml",
+        "import json",
+        "from dotenv import load_dotenv",
+        "from watchdog.observers import Observer",
+        "from watchdog.events import FileSystemEventHandler",
+        "import openai"
+      ]
+    },
+    "./version1/test1.py": {
+      "path": "./version1/test1.py",
+      "lines": 3,
+      "functions": [],
+      "classes": [],
+      "imports": []
+    },
+    "./version1/test.py": {
+      "path": "./version1/test.py",
+      "lines": 1,
+      "functions": [],
+      "classes": [],
+      "imports": []
+    },
+    "./version1/agentv1.py": {
+      "path": "./version1/agentv1.py",
+      "lines": 518,
+      "functions": [
+        "load_config",
+        "load_ignore_patterns",
+        "load_standards",
+        "should_ignore",
+        "__init__",
+        "get_log_file",
+        "write",
+        "__init__",
+        "should_process",
+        "get_file_content",
+        "on_created",
+        "on_modified",
+        "on_deleted",
+        "on_moved",
+        "__init__",
+        "read_all_logs",
+        "generate_report",
+        "cmd_init",
+        "cmd_start",
+        "shutdown",
+        "cmd_stop",
+        "cmd_status",
+        "cmd_report",
+        "cmd_logs",
+        "main"
+      ],
+      "classes": [
+        "LogWriter",
+        "FileEventHandler",
+        "ReportEngine"
+      ],
+      "imports": [
+        "import os",
+        "import sys",
+        "import time",
+        "import signal",
+        "import argparse",
+        "from datetime import datetime",
+        "from pathlib import Path",
+        "import difflib",
+        "import yaml",
+        "from dotenv import load_dotenv",
+        "from watchdog.observers import Observer",
+        "from watchdog.events import FileSystemEventHandler",
+        "import openai"
+      ]
+    }
+  },
+  "summary": {
+    "total_files": 4,
+    "total_lines": 1194,
+    "total_functions": 54,
+    "total_classes": 6
+  }
+}

@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 import difflib
 import yaml
+import json
 
 # Load .env file
 from dotenv import load_dotenv
@@ -33,6 +34,7 @@ STANDARDS_FILE = f"{AGENT_DIR}/standards.md"
 IGNORE_FILE = f"{AGENT_DIR}/ignore.yaml"
 PID_FILE = f"{AGENT_DIR}/.pid"
 PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
+SCAN_FILE = f"{AGENT_DIR}/scan.json"
 
 def load_config():
     """ Load agent configuration form .agents/config.yaml """
@@ -77,6 +79,45 @@ def load_purpose():
     if Path(PURPOSE_FILE).exists():
         return Path(PURPOSE_FILE).read_text()
     return "No repository purpose defined"
+
+def scan_file(file_path):
+    """ Extract metadata from a single file """
+    try:
+        content = Path(file_path).read_text()
+        lines = content.splitlines()
+
+        metadata = {
+            "path": str(file_path),
+            "lines": len(lines),
+            "functions": [],
+            "classes": [],
+            "imports": []
+        }
+
+        for line in lines:
+            stripped = line.strip()
+            # Detect functions
+            if stripped.startswith("def "):
+                func_name = stripped[4:stripped.find("(")]
+                metadata["functions"].append(func_name)
+            #Detcet classes
+            elif stripped.startswith("class "):
+                class_name = stripped[6:stripped.find("(") if "(" in stripped else stripped.find(":")]
+                metadata["classes"].append(class_name)
+            #Detect imports
+            elif stripped.startswith("import ") or stripped.startswith("from "):
+                metadata["imports"].append(stripped)
+
+        return metadata
+    except:
+        return None
+
+def load_scan():
+    """ Load scan data from .agent/scan.json """
+    if Path(SCAN_FILE).exists():
+        with open(SCAN_FILE) as f:
+            return json.load(f)
+    return None
 
 def should_ignore(path, ignore_patterns):
     """ Check if a path should be ignored """
@@ -269,11 +310,27 @@ class ReportEngine:
         
         purpose = load_purpose()
 
+        scan_data = load_scan()
+        scan_context = ""
+        if scan_data:
+            scan_context = f"""
+## Codebase Structure (from scan)
+Total files: {scan_data['summary']['total_files']}
+Total lines: {scan_data['summary']['total_lines']}
+Functions: {scan_data['summary']['total_functions']}
+Classes: {scan_data['summary']['total_classes']}
+
+Files: 
+"""
+
+            for path, meta in scan_data['files'].items():
+                scan_context += f"- {path}: {meta['lines']} lines, {len(meta['functions'])} functions, {len(meta['classes'])} classes\n"
+
         prompt = f"""You are a code review agent analyzing a developer's activity.
 
 ## Repository Purpose
 {purpose}
-
+{scan_context}
 ## Company Coding Standards
 {standards}
 
@@ -302,7 +359,7 @@ Format the report in clean markdown.
         )
 
         return response.choices[0].message.content
-    
+        
 
 # ================================ CLI COMMANDS ============================================
 
@@ -494,6 +551,67 @@ def cmd_logs(date=None):
             print("No logs found.")
 
 
+def cmd_scan():
+    """ Scan existing codebase and build index """
+    if not Path(AGENT_DIR).exists():
+        print("Error: .agent/ folder not found. Run 'python agent.py init' ")
+        return 
+
+    config = load_config()
+    ignore_patterns = load_ignore_patterns()
+    extensions = config.get("watch_extensions", [])
+
+    scan_data = {
+        "scanned_at": datetime.now().isoformat(),
+        "files": {},
+        "summary": {
+            "total_files": 0,
+            "total_lines": 0,
+            "total_functions": 0,
+            "total_classes": 0
+        }
+    }
+
+    print("Scanning codebase...")
+
+    for root, dirs, files in os.walk("."):
+        # Skip ignored directories
+        dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
+            
+        for file in files:
+            file_path = os.path.join(root, file)
+
+            #Skip ignored files
+            if should_ignore(file_path, ignore_patterns):
+                    continue
+
+            #check extension
+            ext = Path(file_path).suffix
+            if ext not in extensions:
+                continue
+
+            metadata = scan_file(file_path)
+            if metadata:
+                scan_data["files"][file_path] = metadata
+                scan_data["summary"]["total_files"] += 1
+                scan_data["summary"]["total_lines"] += metadata["lines"]
+                scan_data["summary"]["total_functions"] += len(metadata["functions"])
+                scan_data["summary"]["total_classes"] += len(metadata["classes"])
+                print(f"  Scanned: {file_path} ")
+
+        # save scan data
+    with open(SCAN_FILE, "w") as f:
+        json.dump(scan_data, f, indent=2)
+
+    print(f"\n Scan Complete! ")
+    print(f" Files: {scan_data['summary']['total_files']}")
+    print(f" Lines: {scan_data['summary']['total_lines']}")
+    print(f"  Functions: {scan_data['summary']['total_functions']}")
+    print(f"  Classes: {scan_data['summary']['total_classes']}")
+    print(f"  Saved to: {SCAN_FILE}")
+
+
+
 # ===================================== MAIN ========================================
 
 def main():
@@ -520,6 +638,9 @@ def main():
     # logs
     logs_parser = subparsers.add_parser("logs", help="View logs")
     logs_parser.add_argument("--date", help="Specific date (YYYY-MM-DD)")
+
+    # scan
+    subparsers.add_parser("scan", help="Scan existing codebase")
     
     args = parser.parse_args()
     
@@ -535,6 +656,8 @@ def main():
         cmd_report(args.from_date, args.to_date)
     elif args.command == "logs":
         cmd_logs(args.date)
+    elif args.command == "scan":
+        cmd_scan()
     else:
         parser.print_help()
 

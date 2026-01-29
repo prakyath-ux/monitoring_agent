@@ -11,3 +11,6 @@ pyyaml>=6.0
 
 # Load .env files
 python-dotenv>=1.0.0
+
+#openAI
+openai
