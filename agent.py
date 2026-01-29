@@ -35,6 +35,7 @@ IGNORE_FILE = f"{AGENT_DIR}/ignore.yaml"
 PID_FILE = f"{AGENT_DIR}/.pid"
 PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
 SCAN_FILE = f"{AGENT_DIR}/scan.json"
+REPORTS_DIR = f"{AGENT_DIR}/reports"
 
 def load_config():
     """ Load agent configuration form .agents/config.yaml """
@@ -368,6 +369,7 @@ def cmd_init():
     # Create directories
     Path(AGENT_DIR).mkdir(exist_ok=True)
     Path(LOGS_DIR).mkdir(exist_ok=True)
+    Path(REPORTS_DIR).mkdir(exist_ok=True)
     
     # Create default config.yaml
     if not Path(CONFIG_FILE).exists():
@@ -523,9 +525,17 @@ def cmd_report(from_date=None, to_date=None):
     report = engine.generate_report(from_date, to_date)
     
     if report:
+        #Print to console
         print("\n" + "="*80)
         print(report)
         print("="*80 + "\n")
+
+        #save to file
+        Path(REPORTS_DIR).mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        report_file = Path(REPORTS_DIR) / f"report_{timestamp}.md"
+        report_file.write_text(report)
+        print(f"Report savd to: {report_file}")
 
 
 def cmd_logs(date=None):
