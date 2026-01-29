@@ -24,6 +24,8 @@ The **Local Directory Monitoring Agent** is an autonomous AI-powered tool that r
 6. [Commands Reference](#commands-reference)
 7. [Use Cases](#use-cases)
 8. [Demo Walkthrough](#demo-walkthrough)
+9. [AI Source Detection](#ai-source-detection)
+10. [Configuration Examples](#configuration-examples)
 
 ---
 
@@ -258,6 +260,7 @@ my-project/
 │   ├── config.yaml       ← Settings (extensions, model, retention)
 │   ├── standards.md      ← Coding standards for your team
 │   ├── purpose.md        ← Repository mission & boundaries
+│   ├── rules.yaml        ← Machine-checkable rules (forbidden imports, patterns)
 │   ├── ignore.yaml       ← Patterns to ignore (node_modules, .env, .git, etc.)
 │   ├── scan.json         ← Codebase metadata snapshot
 │   ├── logs/             ← Activity logs (agent's memory)
@@ -276,6 +279,7 @@ my-project/
 | `config.yaml` | Agent settings | User (once during setup) |
 | `standards.md` | Coding rules to check against | User/Team lead |
 | `purpose.md` | Project mission, boundaries, deviation signals | User/Team lead |
+| `rules.yaml` | Machine-checkable rules for `check` command | User/Team lead |
 | `ignore.yaml` | Files/folders agent should ignore | User |
 | `scan.json` | Codebase structure snapshot | Agent (via `scan` command) |
 | `logs/*.log` | Activity history | Agent (automatic) |
@@ -294,6 +298,7 @@ python agent.py start     # Start monitoring (foreground)
 python agent.py stop      # Stop monitoring
 python agent.py status    # Check if agent is running
 python agent.py logs      # View today's activity logs
+python agent.py check     # Check codebase against rules.yaml
 python agent.py report    # Generate AI-powered analysis report
 ```
 
@@ -413,6 +418,49 @@ DIFF:
 + from flask import Flask
 + app = Flask(__name__)
 ```
+
+---
+
+#### `check` - Validate Against Rules
+
+```bash
+python agent.py check
+```
+
+**What it does:**
+- Reads rules from `.agent/rules.yaml`
+- Scans all files matching configured extensions
+- Checks against defined rules in real-time
+- Reports violations with file paths and line numbers
+
+**Rules checked:**
+- Forbidden file names (e.g., `api.py`, `server.py`)
+- Forbidden imports (e.g., `flask`, `django`, `sqlite3`)
+- Forbidden patterns (e.g., hardcoded passwords, API keys)
+- Max file lines (default: 800)
+- Max function lines (default: 60)
+
+**Output (Example):**
+```
+Checking codebase against rules...
+
+❌ VIOLATIONS FOUND: 3
+
+[./api.py]
+  ├── FORBIDDEN_FILE: File name 'api.py' is not allowed
+  ├── FORBIDDEN_IMPORT: 'flask' import not allowed (line 4)
+
+Files checked: 5
+✅ Passed: 4
+❌ Failed: 1
+```
+
+**When to use:**
+- Before committing code
+- During CI/CD pipeline
+- After AI generates code
+
+**Note:** Rules are also checked in real-time during monitoring. When violations are detected, they appear in the terminal output.
 
 ---
 
@@ -554,15 +602,32 @@ python agent.py start
 
 Leave running in terminal.
 
-#### 4. Make Changes 
+#### 4. Make Changes
 
 In a new terminal or editor:
 - Create a new file with a violation (e.g., `api.py` with Flask)
 - Modify an existing file
 
-Watch the first terminal show events being captured.
+Watch the first terminal show events being captured with source detection:
+```
+[18:02:41] FILE_RENAMED: api.py (via Claude Code (AI))
+⚠️  VIOLATIONS in api.py:
+   └── FORBIDDEN_FILE: File name 'api.py' is not allowed
+   └── FORBIDDEN_IMPORT: 'flask' import not allowed (line 4)
+```
 
-#### 5. Generate Report 
+#### 5. Run Check Command
+
+```bash
+python agent.py check
+```
+
+**Show the output:**
+- Lists all violations found
+- Shows file paths and line numbers
+- Summary of passed/failed files
+
+#### 6. Generate Report
 
 ```bash
 python agent.py report
@@ -571,14 +636,75 @@ python agent.py report
 **Show the report highlighting:**
 - It detected the new file
 - It flagged the Flask violation against purpose.md
+- It shows AI vs manual change breakdown
 - It provided actionable recommendations
 
-#### 6. Show Saved Report
+#### 7. Show Saved Report
 
 ```bash
 ls .agent/reports/
 cat .agent/reports/report_*.md
 ```
+
+---
+
+## AI Source Detection
+
+The agent automatically detects whether code changes came from AI tools or manual editing.
+
+### How It Works
+
+```
+File change detected
+       │
+       ▼
+Check running processes (pgrep/tasklist)
+       │
+       ├── Claude running?
+       ├── VS Code running?
+       ├── Cursor running?
+       │
+       ▼
+Count lines added in diff
+       │
+       ├── >10 lines = "bulk change" (likely AI)
+       └── ≤10 lines = "small change" (likely manual)
+       │
+       ▼
+Determine source label
+```
+
+### Source Labels
+
+| Condition | Label |
+|-----------|-------|
+| Claude + bulk change (>10 lines) | `Claude Code (AI)` |
+| VS Code + bulk change | `VS Code (AI Tool)` |
+| VS Code only | `VS Code` |
+| Cursor + bulk change | `Cursor (AI)` |
+| Cursor only | `Cursor` |
+| Bulk change, no known editor | `AI Tool (likely)` |
+| Small change | `Manual Edit` |
+
+### Where Source Appears
+
+1. **Terminal output** during monitoring:
+   ```
+   [18:02:41] FILE_RENAMED: api.py (via Claude Code (AI))
+   ```
+
+2. **Log files** (`.agent/logs/*.log`):
+   ```
+   [2026-01-29 18:02:41] FILE_RENAMED
+   PATH: /path/to/api.py
+   SOURCE: Claude Code (AI)
+   DIFF:
+   +# New code added by AI
+   +def new_function():
+   +    pass
+   ```
+
+3. **Reports** - The LLM sees SOURCE field and includes AI vs manual breakdown in analysis.
 
 ---
 
@@ -615,6 +741,43 @@ log_retention_days: 30
 - "*.log"
 - .env
 ```
+
+### rules.yaml - Machine-Checkable Rules
+
+```yaml
+rules:
+  # Code size limits
+  max_function_lines: 60
+  max_file_lines: 800
+
+  # Forbidden imports (scope creep prevention)
+  forbidden_imports:
+    - flask
+    - fastapi
+    - django
+    - sqlite3
+    - sqlalchemy
+    - pymongo
+
+  # Forbidden file names
+  forbidden_files:
+    - api.py
+    - server.py
+    - routes.py
+    - models.py
+    - auth.py
+
+  # Forbidden patterns (security)
+  forbidden_patterns:
+    - pattern: "password\\s*=\\s*['\"]"
+      message: "Hardcoded password detected"
+    - pattern: "api_key\\s*=\\s*['\"]"
+      message: "Hardcoded API key detected"
+    - pattern: "secret\\s*=\\s*['\"]"
+      message: "Hardcoded secret detected"
+```
+
+---
 
 ### purpose.md - Define Project Boundaries
 
@@ -661,12 +824,14 @@ A: Configure `log_retention_days` in config.yaml. Default is 30 days.
 |------|-----|
 | **Watch files** | `python agent.py start` |
 | **Index codebase** | `python agent.py scan` |
+| **Check against rules** | `python agent.py check` |
 | **Generate report** | `python agent.py report` |
 | **Define standards** | Edit `.agent/standards.md` |
 | **Define purpose** | Edit `.agent/purpose.md` |
+| **Define rules** | Edit `.agent/rules.yaml` |
 | **Ignore files** | Edit `.agent/ignore.yaml` |
 
-**The agent sees everything. It remembers everything. It reports on demand.**
+**The agent sees everything. It remembers everything. It detects AI changes. It reports on demand.**
 
 ---
 
