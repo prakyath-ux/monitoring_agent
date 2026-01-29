@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.route('/status')
 def status():
-    return "Agent is running"
+    return "Agent is running "
 
 # New feature: log viewer
 @app.route('/logs')
@@ -13,11 +13,11 @@ def view_logs():
         return f.read()
 
 # Another violation: database connection
-import sqlite3
+import sqlite3 
 
 def get_db():
     conn = sqlite3.connect('agent.db')
-    return conn
+    return conn 
 
 if __name__ == "__main__":
     app.run(port=5000)

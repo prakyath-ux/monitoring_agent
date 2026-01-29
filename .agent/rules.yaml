@@ -1,0 +1,23 @@
+rules:
+  max_function_lines: 60
+  max_file_lines: 800
+  forbidden_imports:
+  - flask
+  - fastapi
+  - django
+  - sqlite3
+  - sqlalchemy
+  - pymongo
+  forbidden_files:
+  - api.py
+  - server.py
+  - routes.py
+  - models.py
+  - auth.py
+  forbidden_patterns:
+  - pattern: password\s*=\s*['"]
+    message: Hardcoded password detected
+  - pattern: api_key\s*=\s*['"]
+    message: Hardcoded API key detected
+  - pattern: secret\s*=\s*['"]
+    message: Hardcoded secret detected

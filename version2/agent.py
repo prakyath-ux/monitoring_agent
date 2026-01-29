@@ -36,7 +36,6 @@ PID_FILE = f"{AGENT_DIR}/.pid"
 PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
 SCAN_FILE = f"{AGENT_DIR}/scan.json"
 REPORTS_DIR = f"{AGENT_DIR}/reports"
-RULES_FILE = f"{AGENT_DIR}/rules.yaml"
 
 def load_config():
     """ Load agent configuration form .agents/config.yaml """
@@ -81,13 +80,6 @@ def load_purpose():
     if Path(PURPOSE_FILE).exists():
         return Path(PURPOSE_FILE).read_text()
     return "No repository purpose defined"
-
-def load_rules():
-    """ Load rules from .agent/rules.yaml """
-    if Path(RULES_FILE).exists():
-        with open(RULES_FILE) as f:
-            return yaml.safe_load(f)
-    return None
 
 def scan_file(file_path):
     """ Extract metadata from a single file """
@@ -253,15 +245,6 @@ class FileEventHandler(FileSystemEventHandler):
 
         self.file_contents[event.src_path] = new_content
         self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff)
-
-        # Real-time rule checking (silent on success)
-        rules_data = load_rules()
-        if rules_data and "rules" in rules_data:
-            violations = check_file(event.src_path, rules_data["rules"])
-            if violations:
-                print(f"\n⚠️  VIOLATIONS in {event.src_path}:")
-                for v in violations:
-                    print(f"   └── {v['type']}: {v['message']}")
 
 
     def on_deleted(self, event):
@@ -455,40 +438,6 @@ def cmd_init():
     print(f"  Created: {IGNORE_FILE}")
     print(f"  Created: {PURPOSE_FILE} ")
 
-    # Create default rules.yaml file
-    if not Path(RULES_FILE).exists():
-        default_rules = {
-            "rules": {
-                "max_function_lines": 60,
-                "max_file_lines": 800,
-                "forbidden_imports": [
-                    "flask",
-                    "fastapi",
-                    "django",
-                    "sqlite3",
-                    "sqlalchemy",
-                    "pymongo"
-                ],
-
-                "forbidden_files": [
-                    "api.py",
-                    "server.py",
-                    "routes.py",
-                    "models.py",
-                    "auth.py"
-                ],
-
-                "forbidden_patterns": [
-                    {"pattern": "password\\s*=\\s*['\"]", "message": "Hardcoded password detected"},
-                    {"pattern": "api_key\\s*=\\s*['\"]", "message": "Hardcoded API key detected"},
-                    {"pattern": "secret\\s*=\\s*['\"]", "message": "Hardcoded secret detected"}
-                ]
-            }
-        }
-        with open(RULES_FILE, "w") as f:
-            yaml.dump(default_rules, f, default_flow_style=False, sort_keys=False)
-
-
 def cmd_start():
     """Start the file watcher in background"""
     # Check if already running
@@ -672,154 +621,6 @@ def cmd_scan():
     print(f"  Saved to: {SCAN_FILE}")
 
 
-def check_file(file_path, rules):
-    """Check a single file against rules, return list of violations"""
-    import ast
-    import re
-
-    violations = []
-    file_name = os.path.basename(file_path)
-
-    #check forbidden file names
-    forbidden_files = rules.get("forbidden_files", [])
-    if file_name in forbidden_files:
-        violations.append({
-            "type": "FORBIDDEN_FILE",
-            "message": f"File name '{file_name}' is not allowed"
-        })
-
-    # Read file content
-    try:
-        with open(file_path, 'r') as f:
-            content = f.read()
-            lines = content.split('\n')
-    except Exception as e:
-        return [{"type": "ERROR", "message": f"Could not read file {e}"}]
-    
-    # Check max file lines
-    max_file_lines = rules.get("max_file_lines", 800)
-    if len(lines) > max_file_lines:
-        violations.append({
-            "type": "FILE_TOO_LONG",
-            "message": f"File has {len(lines)} lines (max: {max_file_lines})"
-        })
-
-    #check forbidden patterns
-    forbidden_patterns = rules.get("forbidden_patterns", [])
-    for pattern_rule in forbidden_patterns:
-        pattern = pattern_rule.get("pattern", "")
-        message = pattern_rule.get("message", "Forbidden pattern found")
-        for i, line in enumerate(lines, 1):
-            if re.search(pattern, line):
-                violations.append({
-                    "type": "FORBIDDEN_PATTERN",
-                    "message": f"{message} (line {i})"
-                })
-
-    # Python specific checks
-    if file_path.endswith('.py'):
-        try:
-            tree = ast.parse(content)
-        except SyntaxError:
-            return violations
-
-        # Check forbidden imports
-        forbidden_imports = rules.get("forbidden_imports", [])
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name in forbidden_imports:
-                        violations.append({
-                            "type": "FORBIDDEN_IMPORT",
-                            "message": f"'{alias.name}' import not allowed (line {node.lineno})"
-                        })
-            elif isinstance(node, ast.ImportFrom):
-                if node.module and node.module.split('.')[0] in forbidden_imports:
-                    violations.append({
-                        "type": "FORBIDDEN_IMPORT",
-                        "message": f"'{node.module}' import not allowed (line {node.lineno})"
-                    })
-        
-        # Check function line counts
-        max_func_lines = rules.get("max_function_lines", 50)
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                func_lines = node.end_lineno - node.lineno + 1
-                if func_lines > max_func_lines:
-                    violations.append({
-                        "type": "FUNCTION_TOO_LONG",
-                        "message": f"'{node.name}' has {func_lines} lines (max: {max_func_lines})"
-                    })
-    
-    return violations
-
-
-def cmd_check():
-    """Check codebase against rules.yaml"""
-    if not Path(AGENT_DIR).exists():
-        print("Agent not initialized. Run 'python agent.py init' first.")
-        return
-    
-    rules_data = load_rules()
-    if not rules_data or "rules" not in rules_data:
-        print("No rules.yaml found or empty. Run 'python agent.py init' to create default rules.")
-        return
-    
-    rules = rules_data["rules"]
-    config = load_config()
-    extensions = config.get("watch_extensions", [".py"])
-    ignore_patterns = load_ignore_patterns()
-    
-    print("Checking codebase against rules...\n")
-    
-    all_violations = {}
-    files_checked = 0
-    files_passed = 0
-    files_failed = 0
-    
-    for root, dirs, files in os.walk("."):
-        dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
-        
-        for file in files:
-            file_path = os.path.join(root, file)
-            
-            if should_ignore(file_path, ignore_patterns):
-                continue
-            
-            ext = Path(file_path).suffix
-            if ext not in extensions:
-                continue
-            
-            files_checked += 1
-            violations = check_file(file_path, rules)
-            
-            if violations:
-                all_violations[file_path] = violations
-                files_failed += 1
-            else:
-                files_passed += 1
-    
-    # Print results
-    if all_violations:
-        total_violations = sum(len(v) for v in all_violations.values())
-        print(f"❌ VIOLATIONS FOUND: {total_violations}\n")
-        
-        for file_path, violations in all_violations.items():
-            print(f"[{file_path}]")
-            for v in violations:
-                print(f"  ├── {v['type']}: {v['message']}")
-            print()
-    else:
-        print("✅ No violations found!\n")
-    
-    print(f"Files checked: {files_checked}")
-    print(f"✅ Passed: {files_passed}")
-    print(f"❌ Failed: {files_failed}")
-
-
-
-
-
 
 # ===================================== MAIN ========================================
 
@@ -850,10 +651,6 @@ def main():
 
     # scan
     subparsers.add_parser("scan", help="Scan existing codebase")
-
-    #check
-    subparsers.add_parser("check", help="Check code against rules")
-
     
     args = parser.parse_args()
     
@@ -871,8 +668,6 @@ def main():
         cmd_logs(args.date)
     elif args.command == "scan":
         cmd_scan()
-    elif args.command == "check":
-        cmd_check()
     else:
         parser.print_help()
 
