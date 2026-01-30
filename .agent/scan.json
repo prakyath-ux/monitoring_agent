@@ -1,17 +1,20 @@
 {
-  "scanned_at": "2026-01-29T17:48:43.086819",
+  "scanned_at": "2026-01-30T09:33:38.251736",
   "files": {
     "./api.py": {
       "path": "./api.py",
-      "lines": 86,
+      "lines": 159,
       "functions": [
         "get_users",
+        "get_stats",
         "get_user",
         "health_check",
         "create_user",
         "delete_user",
         "update_user",
-        "search_users"
+        "bulk_create_users",
+        "search_users",
+        "get_user_analytics"
       ],
       "classes": [],
       "imports": [
@@ -20,7 +23,7 @@
     },
     "./agent.py": {
       "path": "./agent.py",
-      "lines": 974,
+      "lines": 998,
       "functions": [
         "load_config",
         "load_ignore_patterns",
@@ -221,8 +224,8 @@
   },
   "summary": {
     "total_files": 7,
-    "total_lines": 2285,
-    "total_functions": 98,
+    "total_lines": 2382,
+    "total_functions": 101,
     "total_classes": 9
   }
 }
