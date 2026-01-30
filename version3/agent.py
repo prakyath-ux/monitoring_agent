@@ -37,14 +37,6 @@ PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
 SCAN_FILE = f"{AGENT_DIR}/scan.json"
 REPORTS_DIR = f"{AGENT_DIR}/reports"
 RULES_FILE = f"{AGENT_DIR}/rules.yaml"
-USAGE_DIR = f"{AGENT_DIR}/usage"
-USAGE_FILE = f"{USAGE_DIR}/usage.json"
-
-#GPT-4o models pricing
-PRICING = {
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-}
 
 def load_config():
     """ Load agent configuration form .agents/config.yaml """
@@ -96,51 +88,6 @@ def load_rules():
         with open(RULES_FILE) as f:
             return yaml.safe_load(f)
     return None
-
-def load_usage():
-    """Load usage data from .agent/usage/usage.json"""
-    if Path(USAGE_FILE).exists():
-        with open(USAGE_FILE) as f:
-            return json.load(f)
-    return {
-        "total_input_tokens": 0,
-        "total_output_tokens": 0,
-        "total_cost_usd": 0.0,
-        "requests": []
-    }
-
-def log_usage(model, input_tokens, output_tokens,  purpose="report"):
-    """Log a single API request to usage file"""
-    Path(USAGE_DIR).mkdir(parents=True, exist_ok = True)
-    data = load_usage()
-
-    #Calculate Cost
-    pricing = PRICING.get(model, PRICING["gpt-4o"])
-    input_cost = (input_tokens / 1_000_000) * pricing["input"]
-    output_cost = (output_tokens / 1_000_000) * pricing["output"]
-    total_cost = input_cost + output_cost
-
-    #update totals
-    data["total_input_tokens"] += input_tokens
-    data["total_output_tokens"] += output_tokens
-    data["total_cost_usd"] += total_cost
-
-    # Add request entry
-    data["requests"].append({
-        "timestamp": datetime.now().isoformat(),
-        "model": model,
-        "purpose": purpose,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cost_usd": round(total_cost, 6)
-    })
-
-    #save
-    with open(USAGE_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-    return total_cost
-
 
 def detect_editor_source(file_path, diff_lines_added=0):
     """Detect if change came from AI tool or manual edit (cross-platform)"""
@@ -541,17 +488,6 @@ Format the report in clean markdown.
             max_tokens=4096,
             messages = [{'role': 'user', 'content': prompt}]
         )
-
-        # Log usage
-        model = self.config.get("model", "gpt-4o")
-        cost = log_usage(
-            model=model,
-            input_tokens=response.usage.prompt_tokens,
-            output_tokens=response.usage.completion_tokens,
-            purpose="report"
-        )
-        print(f"  Tokens: {response.usage.prompt_tokens} in / {response.usage.completion_tokens} out")
-        print(f"  Cost: ${cost:.4f}")
 
         return response.choices[0].message.content
         

@@ -1,0 +1,15 @@
+{
+  "total_input_tokens": 10999,
+  "total_output_tokens": 805,
+  "total_cost_usd": 0.0355475,
+  "requests": [
+    {
+      "timestamp": "2026-01-30T11:47:39.658845",
+      "model": "gpt-4o",
+      "purpose": "report",
+      "input_tokens": 10999,
+      "output_tokens": 805,
+      "cost_usd": 0.035548
+    }
+  ]
+}

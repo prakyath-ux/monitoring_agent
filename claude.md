@@ -1,7 +1,7 @@
 # Local Directory Monitoring Agent
 
-> **Status: Phase 2 Complete**
-> **Last Updated: 29 January 2026**
+> **Status: Phase 2 Complete & Demoed**
+> **Last Updated: 30 January 2026**
 
 ## Project Vision
 
@@ -13,19 +13,28 @@ Dev works normally → Agent watches silently → Logs everything → Generate r
 
 ---
 
-## Phase 2 Completed (29 Jan 2026)
+## Phase 2 Completed (30 Jan 2026)
 
 ### Initial Requirements (All Complete)
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| 1 | **purpose.md** - Define repo intent for deviation detection | Done |
-| 2 | **rules.yaml** - Machine-checkable coding rules | Done |
-| 3 | **scan command** - Build context from existing codebase | Done |
-| 4 | **check command** - Real-time rule validation on file changes | Done |
-| 5 | **AI source detection** - Identify if changes came from AI tools | Done |
+| 1 | **purpose.md** - Define repo intent for deviation detection | ✅ Done |
+| 2 | **rules.yaml** - Machine-checkable coding rules | ✅ Done |
+| 3 | **scan command** - Build context from existing codebase | ✅ Done |
+| 4 | **check command** - Real-time rule validation on file changes | ✅ Done |
+| 5 | **AI source detection** - Identify if changes came from AI tools | ✅ Done |
+| 6 | **Log source tracking** - Store AI detection info in logs | ✅ Done |
 
-### Today's Wins
+### Demo Completed (30 Jan 2026)
+
+Successfully demonstrated:
+- Claude Code AI detection working in real-time
+- Diff logging capturing full code changes
+- SOURCE field correctly identifying `Claude Code (AI)` vs `VS Code`
+- Bulk change heuristic (>10 lines) triggering AI classification
+
+### Key Features Working
 
 **1. `check` Command System**
 - Validates codebase against `rules.yaml`
@@ -41,6 +50,20 @@ Dev works normally → Agent watches silently → Logs everything → Generate r
   - `(via VS Code)` - manual small edits
   - `(via Claude Code (AI))` - AI bulk changes
   - `(via Cursor (AI))` - Cursor AI changes
+
+**3. Log Entry Format**
+```
+[timestamp] FILE_MODIFIED | FILE_RENAMED | FILE_CREATED | FILE_DELETED
+PATH: /path/to/file
+SOURCE: Claude Code (AI) | VS Code | Cursor | Manual Edit
+DIFF: (unified diff of changes)
+```
+
+### Known Behavior
+
+- **Atomic writes**: Claude Code (and many editors) use atomic writes (write temp → rename over original)
+- This triggers `FILE_RENAMED` + `FILE_DELETED` events instead of `FILE_MODIFIED`
+- The agent correctly captures the diff and source in `on_moved()` handler
 
 ---
 
@@ -148,10 +171,27 @@ else:
 
 ## Phase 3 Roadmap (Future)
 
-| Feature | Purpose |
-|---------|---------|
-| Conflict detection | Identify when changes conflict with existing code |
-| Solution suggestions | Propose fixes for detected issues |
-| Auto-fix mode | Automatically apply safe fixes with approval |
-| Log source tracking | Store AI detection info in logs |
-| Report integration | Include AI vs manual breakdown in reports |
+| Feature | Purpose | Priority |
+|---------|---------|----------|
+| **Report integration** | Include AI vs manual breakdown in reports | High |
+| **Conflict detection** | Identify when changes conflict with existing code | High |
+| **Solution suggestions** | Propose fixes for detected issues (via LLM) | Medium |
+| **Auto-fix mode** | Automatically apply safe fixes with approval | Medium |
+| **Normalize event types** | Map FILE_RENAMED → FILE_MODIFIED for atomic writes | Low |
+
+### Phase 3 Discussion Topics
+
+1. **Report AI/Manual Breakdown**
+   - Parse logs for SOURCE field
+   - Calculate: X% AI-generated, Y% manual edits
+   - List which files were AI-modified
+
+2. **Conflict Detection**
+   - Compare changes against `purpose.md` intent
+   - Flag when AI introduces patterns that conflict with existing code
+   - Detect when AI duplicates existing functionality
+
+3. **Solution Suggestions**
+   - When violations detected, use LLM to suggest fixes
+   - Show diff preview before applying
+   - Respect rules.yaml constraints
