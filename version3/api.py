@@ -330,6 +330,31 @@ print("conducting a test")
 print("conducting a test")
 
 print("checking log test on for pause command")
+print("A final test run")
+
+# ==================== DEV BATCH - PROJECT MANAGEMENT ====================
+@app.route('/projects', methods=['GET'])
+def get_projects():
+    """Get all active projects and their status"""
+    department = request.args.get('department', 'all')
+    projects = [
+        {"id": 1, "name": "Platform Redesign", "department": "Engineering", "status": "active", "progress": 72, "deadline": "2026-03-15"},
+        {"id": 2, "name": "Mobile App v2", "department": "Engineering", "status": "active", "progress": 45, "deadline": "2026-04-01"},
+        {"id": 3, "name": "Brand Refresh", "department": "Design", "status": "completed", "progress": 100, "deadline": "2026-01-30"},
+        {"id": 4, "name": "Q1 Campaign", "department": "Marketing", "status": "active", "progress": 60, "deadline": "2026-03-31"},
+        {"id": 5, "name": "Data Pipeline", "department": "Engineering", "status": "on_hold", "progress": 30, "deadline": "2026-05-01"},
+    ]
+    if department != 'all':
+        projects = [p for p in projects if p["department"].lower() == department.lower()]
+    active = sum(1 for p in projects if p["status"] == "active")
+    avg_progress = sum(p["progress"] for p in projects) / len(projects) if projects else 0
+    return jsonify({
+        "projects": projects,
+        "total": len(projects),
+        "active": active,
+        "average_progress": round(avg_progress, 1)
+    })
+# ==================== END DEV BATCH ====================
 
 if __name__ == '__main__':
     app.run(debug=True)
