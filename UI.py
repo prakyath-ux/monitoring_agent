@@ -764,13 +764,11 @@ elif page == "Settings":
     with tab4:
         usage = load_usage()
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             st.metric("Input Tokens", f"{usage['total_input_tokens']:,}")
         with col2:
             st.metric("Output Tokens", f"{usage['total_output_tokens']:,}")
-        with col3:
-            st.metric("Total Cost", f"${usage['total_cost_usd']:.4f}")
 
         if usage["requests"]:
             st.markdown("---")
@@ -781,8 +779,7 @@ elif page == "Settings":
                     f'<strong>{req["timestamp"][:19]}</strong> &nbsp; | &nbsp; '
                     f'{req["model"]} &nbsp; | &nbsp; '
                     f'{req["purpose"]}<br>'
-                    f'{req["input_tokens"]:,} in &nbsp; {req["output_tokens"]:,} out &nbsp; '
-                    f'${req["cost_usd"]:.6f}'
+                    f'{req["input_tokens"]:,} in &nbsp; {req["output_tokens"]:,} out'
                     f'</div>',
                     unsafe_allow_html=True
                 )
