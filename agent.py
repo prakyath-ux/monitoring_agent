@@ -390,7 +390,8 @@ class FileEventHandler(FileSystemEventHandler):
         # Real-time rule checking (silent on success)
         rules_data = load_rules()
         if rules_data and "rules" in rules_data:
-            violations = check_file(event.src_path, rules_data["rules"])
+            results = check_file(event.src_path, rules_data["rules"])
+            violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
                 print(f"\n⚠️  VIOLATIONS in {event.src_path}:")
                 for v in violations:
@@ -446,7 +447,8 @@ class FileEventHandler(FileSystemEventHandler):
         # Real-time rule checking for renamed files
         rules_data = load_rules()
         if rules_data and "rules" in rules_data:
-            violations = check_file(event.dest_path, rules_data["rules"])
+            results = check_file(event.dest_path, rules_data["rules"])
+            violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
                 print(f"\n⚠️  VIOLATIONS in {event.dest_path}:")
                 for v in violations:
@@ -850,18 +852,19 @@ def cmd_scan():
 
 
 def check_file(file_path, rules):
-    """Check a single file against rules, return list of violations"""
+    """Check a single file against rules, return list of violations and advisories"""
     import ast
     import re
 
-    violations = []
+    results = []
     file_name = os.path.basename(file_path)
 
     #check forbidden file names
     forbidden_files = rules.get("forbidden_files", [])
     if file_name in forbidden_files:
-        violations.append({
+        results.append({
             "type": "FORBIDDEN_FILE",
+            "severity": "violation",
             "message": f"File name '{file_name}' is not allowed"
         })
 
@@ -871,14 +874,15 @@ def check_file(file_path, rules):
             content = f.read()
             lines = content.split('\n')
     except Exception as e:
-        return [{"type": "ERROR", "message": f"Could not read file {e}"}]
-    
-    # Check max file lines
+        return [{"type": "ERROR", "severity": "violation", "message": f"Could not read file {e}"}]
+
+    # Check file lines (advisory, not violation)
     max_file_lines = rules.get("max_file_lines", 800)
     if len(lines) > max_file_lines:
-        violations.append({
+        results.append({
             "type": "FILE_TOO_LONG",
-            "message": f"File has {len(lines)} lines (max: {max_file_lines})"
+            "severity": "advisory",
+            "message": f"File has {len(lines)} lines (threshold: {max_file_lines}) — consider reviewing"
         })
 
     #check forbidden patterns
@@ -888,8 +892,9 @@ def check_file(file_path, rules):
         message = pattern_rule.get("message", "Forbidden pattern found")
         for i, line in enumerate(lines, 1):
             if re.search(pattern, line):
-                violations.append({
+                results.append({
                     "type": "FORBIDDEN_PATTERN",
+                    "severity": "violation",
                     "message": f"{message} (line {i})"
                 })
 
@@ -898,7 +903,7 @@ def check_file(file_path, rules):
         try:
             tree = ast.parse(content)
         except SyntaxError:
-            return violations
+            return results
 
         # Check forbidden imports
         forbidden_imports = rules.get("forbidden_imports", [])
@@ -906,29 +911,32 @@ def check_file(file_path, rules):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name in forbidden_imports:
-                        violations.append({
+                        results.append({
                             "type": "FORBIDDEN_IMPORT",
+                            "severity": "violation",
                             "message": f"'{alias.name}' import not allowed (line {node.lineno})"
                         })
             elif isinstance(node, ast.ImportFrom):
                 if node.module and node.module.split('.')[0] in forbidden_imports:
-                    violations.append({
+                    results.append({
                         "type": "FORBIDDEN_IMPORT",
+                        "severity": "violation",
                         "message": f"'{node.module}' import not allowed (line {node.lineno})"
                     })
-        
-        # Check function line counts
+
+        # Check function line counts (advisory, not violation)
         max_func_lines = rules.get("max_function_lines", 50)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 func_lines = node.end_lineno - node.lineno + 1
                 if func_lines > max_func_lines:
-                    violations.append({
+                    results.append({
                         "type": "FUNCTION_TOO_LONG",
-                        "message": f"'{node.name}' has {func_lines} lines (max: {max_func_lines})"
+                        "severity": "advisory",
+                        "message": f"'{node.name}' has {func_lines} lines (threshold: {max_func_lines}) — consider refactoring"
                     })
-    
-    return violations
+
+    return results
 
 
 def cmd_check():
@@ -936,62 +944,82 @@ def cmd_check():
     if not Path(AGENT_DIR).exists():
         print("Agent not initialized. Run 'python agent.py init' first.")
         return
-    
+
     rules_data = load_rules()
     if not rules_data or "rules" not in rules_data:
         print("No rules.yaml found or empty. Run 'python agent.py init' to create default rules.")
         return
-    
+
     rules = rules_data["rules"]
     config = load_config()
     extensions = config.get("watch_extensions", [".py"])
     ignore_patterns = load_ignore_patterns()
-    
+
     print("Checking codebase against rules...\n")
-    
+
     all_violations = {}
+    all_advisories = {}
     files_checked = 0
     files_passed = 0
     files_failed = 0
-    
+
     for root, dirs, files in os.walk("."):
         dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
-        
+
         for file in files:
             file_path = os.path.join(root, file)
-            
+
             if should_ignore(file_path, ignore_patterns):
                 continue
-            
+
             ext = Path(file_path).suffix
             if ext not in extensions:
                 continue
-            
+
             files_checked += 1
-            violations = check_file(file_path, rules)
-            
+            results = check_file(file_path, rules)
+
+            violations = [r for r in results if r.get("severity") == "violation"]
+            advisories = [r for r in results if r.get("severity") == "advisory"]
+
             if violations:
                 all_violations[file_path] = violations
                 files_failed += 1
+            elif advisories:
+                files_passed += 1
             else:
                 files_passed += 1
-    
-    # Print results
+
+            if advisories:
+                all_advisories[file_path] = advisories
+
+    # Print violations
     if all_violations:
         total_violations = sum(len(v) for v in all_violations.values())
-        print(f"❌ VIOLATIONS FOUND: {total_violations}\n")
-        
+        print(f"VIOLATIONS FOUND: {total_violations}\n")
+
         for file_path, violations in all_violations.items():
             print(f"[{file_path}]")
             for v in violations:
                 print(f"  ├── {v['type']}: {v['message']}")
             print()
     else:
-        print("✅ No violations found!\n")
-    
+        print("No violations found.\n")
+
+    # Print advisories
+    if all_advisories:
+        total_advisories = sum(len(a) for a in all_advisories.values())
+        print(f"ADVISORIES: {total_advisories}\n")
+
+        for file_path, advisories in all_advisories.items():
+            print(f"[{file_path}]")
+            for a in advisories:
+                print(f"  ├── {a['type']}: {a['message']}")
+            print()
+
     print(f"Files checked: {files_checked}")
-    print(f"✅ Passed: {files_passed}")
-    print(f"❌ Failed: {files_failed}")
+    print(f"Passed: {files_passed}")
+    print(f"Failed: {files_failed}")
 
 
 
