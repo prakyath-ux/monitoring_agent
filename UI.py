@@ -388,21 +388,21 @@ with st.sidebar:
     # Navigation
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "📜 Activity Logs", "📋 Rule Violations", "📄 Reports", "⚙️ Settings"],
+        ["Dashboard", "Activity Logs", "Rule Violations", "Reports", "Settings"],
         label_visibility="collapsed"
     )
 
     st.markdown("---")
-    st.caption(f"📁 {os.getcwd()}")
-    st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"{os.getcwd()}")
+    st.caption(f"{datetime.now().strftime('%H:%M:%S')}")
 
 
 # ══════════════════════════════════════════════════
 #  PAGE 1: DASHBOARD
 # ══════════════════════════════════════════════════
 
-if page == "📊 Dashboard":
-    st.header("📊 Dashboard")
+if page == "Dashboard":
+    st.header("Dashboard")
     st.markdown("---")
 
     # ── Alerts ──
@@ -468,18 +468,18 @@ if page == "📊 Dashboard":
 #  PAGE 2: ACTIVITY LOGS
 # ══════════════════════════════════════════════════
 
-elif page == "📜 Activity Logs":
-    st.header("📜 Activity Logs")
+elif page == "Activity Logs":
+    st.header("Activity Logs")
     st.markdown("---")
 
     # Filters row
     col_source, col_event = st.columns(2)
 
     with col_source:
-        source_filter = st.selectbox("🔍 Filter by Source", ["All", "AI Only", "Manual Only"])
+        source_filter = st.selectbox("Filter by Source", ["All", "AI Only", "Manual Only"])
 
     with col_event:
-        event_filter = st.selectbox("📂 Filter by Event", ["All", "FILE_MODIFIED", "FILE_CREATED", "FILE_DELETED", "FILE_RENAMED", "BRANCH_SWITCHED"])
+        event_filter = st.selectbox("Filter by Event", ["All", "FILE_MODIFIED", "FILE_CREATED", "FILE_DELETED", "FILE_RENAMED", "BRANCH_SWITCHED"])
 
     st.markdown("---")
 
@@ -559,7 +559,7 @@ elif page == "📜 Activity Logs":
 #  PAGE 3: RULE VIOLATIONS
 # ══════════════════════════════════════════════════
 
-elif page == "📋 Rule Violations":
+elif page == "Rule Violations":
     st.markdown("#### Rule Violations")
     st.caption("Validate codebase against rules.yaml")
     st.markdown("---")
@@ -684,13 +684,13 @@ elif page == "📋 Rule Violations":
 #  PAGE 4: REPORTS
 # ══════════════════════════════════════════════════
 
-elif page == "📄 Reports":
-    st.header("📄 Reports")
+elif page == "Reports":
+    st.header("Reports")
     st.markdown("---")
 
     col_btn, col_spacer = st.columns([1, 3])
     with col_btn:
-        generate = st.button("📊 Generate New Report", use_container_width=True)
+        generate = st.button("Generate New Report", use_container_width=True)
 
     if generate:
         with st.spinner("Generating report via OpenAI... This may take a moment."):
@@ -702,7 +702,7 @@ elif page == "📄 Reports":
         st.markdown(st.session_state.report_output)
 
     st.markdown("---")
-    st.subheader("📁 Past Reports")
+    st.subheader("Past Reports")
 
     reports_path = Path(REPORTS_DIR)
     if reports_path.exists():
@@ -712,7 +712,7 @@ elif page == "📄 Reports":
             for report_file in report_files:
                 col_name, col_view = st.columns([3, 1])
                 with col_name:
-                    st.caption(f"📄 {report_file.name}")
+                    st.caption(f"{report_file.name}")
                 with col_view:
                     if st.button("View", key=report_file.name, use_container_width=True):
                         st.session_state.viewing_report = report_file.name
@@ -722,7 +722,7 @@ elif page == "📄 Reports":
                 st.markdown("---")
                 report_path = reports_path / st.session_state.viewing_report
                 if report_path.exists():
-                    st.subheader(f"📄 {st.session_state.viewing_report}")
+                    st.subheader(f"{st.session_state.viewing_report}")
                     st.markdown(report_path.read_text())
         else:
             st.info("No reports generated yet.")
@@ -734,11 +734,11 @@ elif page == "📄 Reports":
 #  PAGE 5: SETTINGS
 # ══════════════════════════════════════════════════
 
-elif page == "⚙️ Settings":
-    st.header("⚙️ Settings")
+elif page == "Settings":
+    st.header("Settings")
     st.markdown("---")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Config", "📏 Rules", "🎯 Purpose", "💰 API Usage"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Config", "Rules", "Purpose", "API Usage"])
 
     # Config tab
     with tab1:
@@ -766,11 +766,11 @@ elif page == "⚙️ Settings":
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("📥 Input Tokens", f"{usage['total_input_tokens']:,}")
+            st.metric("Input Tokens", f"{usage['total_input_tokens']:,}")
         with col2:
-            st.metric("📤 Output Tokens", f"{usage['total_output_tokens']:,}")
+            st.metric("Output Tokens", f"{usage['total_output_tokens']:,}")
         with col3:
-            st.metric("💰 Total Cost", f"${usage['total_cost_usd']:.4f}")
+            st.metric("Total Cost", f"${usage['total_cost_usd']:.4f}")
 
         if usage["requests"]:
             st.markdown("---")
@@ -781,8 +781,8 @@ elif page == "⚙️ Settings":
                     f'<strong>{req["timestamp"][:19]}</strong> &nbsp; | &nbsp; '
                     f'{req["model"]} &nbsp; | &nbsp; '
                     f'{req["purpose"]}<br>'
-                    f'📥 {req["input_tokens"]:,} in &nbsp; 📤 {req["output_tokens"]:,} out &nbsp; '
-                    f'💰 ${req["cost_usd"]:.6f}'
+                    f'{req["input_tokens"]:,} in &nbsp; {req["output_tokens"]:,} out &nbsp; '
+                    f'${req["cost_usd"]:.6f}'
                     f'</div>',
                     unsafe_allow_html=True
                 )
