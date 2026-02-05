@@ -204,7 +204,7 @@ def get_user_metrics():
     })
 # ==================== END SEVENTH BATCH ====================
 
-print("checking log test on 5th Feb")
+
 
 # ==================== TEST BATCH FOR AI DETECTION ====================
 def get_system_health():
@@ -328,6 +328,8 @@ def get_user_roles():
 # ==================== END DEMO BATCH ====================
 print("conducting a test")
 print("conducting a test")
+
+print("checking log test on for pause command")
 
 if __name__ == '__main__':
     app.run(debug=True)
