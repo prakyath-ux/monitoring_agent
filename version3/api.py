@@ -203,6 +203,28 @@ def get_user_metrics():
 # ==================== END SEVENTH BATCH ====================
 
 print("this is a log test")
+print("This is a test for branch dev2")
+
+# ==================== DEV2 BATCH - TASK MANAGEMENT ====================
+@app.route('/tasks', methods=['GET'])
+def get_tasks():
+    """Get all project tasks - added on dev2 branch"""
+    status_filter = request.args.get('status', 'all')
+    tasks = [
+        {"id": 1, "title": "Setup CI/CD pipeline", "status": "completed", "assignee": "Alice", "priority": "high"},
+        {"id": 2, "title": "Write unit tests", "status": "in_progress", "assignee": "Bob", "priority": "high"},
+        {"id": 3, "title": "Update documentation", "status": "pending", "assignee": "Charlie", "priority": "medium"},
+        {"id": 4, "title": "Code review sprint 3", "status": "in_progress", "assignee": "Diana", "priority": "high"},
+        {"id": 5, "title": "Deploy to staging", "status": "pending", "assignee": "Eve", "priority": "low"},
+    ]
+    if status_filter != 'all':
+        tasks = [t for t in tasks if t["status"] == status_filter]
+    return jsonify({
+        "tasks": tasks,
+        "total": len(tasks),
+        "filter": status_filter
+    })
+# ==================== END DEV2 BATCH ====================
 
 if __name__ == '__main__':
     app.run(debug=True)
