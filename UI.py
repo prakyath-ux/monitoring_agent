@@ -10,7 +10,7 @@ from datetime import datetime
 # ── Page Configuration ──
 st.set_page_config(
     page_title="RepoAgent",
-    page_icon="🛡️",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -45,18 +45,18 @@ st.markdown("""
         margin-top: 5px;
     }
     .violation-card {
-        background: #2d1b1b;
-        border-left: 4px solid #f85149;
-        padding: 14px 18px;
-        border-radius: 0 8px 8px 0;
-        margin-bottom: 10px;
-        color: #f0f0f0;
-        font-size: 1rem;
-        line-height: 1.6;
+        background: #fafafa;
+        border-left: 3px solid #c0392b;
+        padding: 12px 16px;
+        border-radius: 0 6px 6px 0;
+        margin-bottom: 8px;
+        color: #333;
+        font-size: 0.95rem;
+        line-height: 1.5;
     }
     .violation-card strong {
-        color: #ff6b6b;
-        font-size: 1.05rem;
+        color: #222;
+        font-size: 0.95rem;
     }
     .deviation-card {
         background: #2d2b1b;
@@ -79,41 +79,58 @@ st.markdown("""
         font-weight: 500;
     }
     .log-entry {
-        background: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 12px;
-        color: #e6edf3;
-        font-size: 1rem;
-        line-height: 1.6;
+        border-bottom: 1px solid #e0e0e0;
+        padding: 10px 4px;
+        margin-bottom: 0;
+        color: #222;
+        font-size: 0.92rem;
+        line-height: 1.5;
     }
     .log-entry strong {
-        color: #58a6ff;
+        color: #333;
+        font-weight: 600;
     }
     .log-entry code {
-        color: #79c0ff;
-        background: #0d1117;
+        color: #333;
+        background: #f0f0f0;
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 3px;
+        font-size: 0.88rem;
+    }
+    .log-entry .log-source-ai {
+        color: #c0392b;
+        font-weight: 600;
+    }
+    .log-entry .log-source-manual {
+        color: #27864a;
+        font-weight: 600;
+    }
+    .log-entry .log-event {
+        color: #555;
+        font-weight: 600;
+    }
+    .log-entry .log-time {
+        color: #888;
+        font-weight: 500;
+        font-size: 0.88rem;
     }
     .activity-row {
         padding: 10px 0;
         border-bottom: 1px solid #21262d;
         font-size: 1rem;
-        color: #e6edf3;
+        color: #111;
     }
     .activity-time {
-        color: #8b949e;
-        font-weight: 500;
+        color: #111;
+        font-weight: 700;
     }
     .activity-event {
-        font-weight: 600;
-        color: #e6edf3;
+        font-weight: 700;
+        color: #111;
     }
     .activity-file {
-        color: #79c0ff;
-        font-weight: 500;
+        color: #111;
+        font-weight: 700;
     }
     .activity-source-ai {
         color: #f85149;
@@ -201,6 +218,11 @@ def parse_log_entries(log_text):
             entry["source"] = source_match.group(1).strip()
         else:
             entry["source"] = "Unknown"
+
+        # Parse branch
+        branch_match = re.search(r'BRANCH: (.+)', block)
+        if branch_match:
+            entry["branch"] = branch_match.group(1).strip()
 
         # Parse diff
         diff_match = re.search(r'DIFF:\n(.*)', block, re.DOTALL)
@@ -313,12 +335,26 @@ def parse_violations(output):
     return violations
 
 
+# ── Auto-Start Agent ──
+if "auto_start_attempted" not in st.session_state:
+    st.session_state.auto_start_attempted = True
+    if not is_agent_running() and Path(AGENT_DIR).exists():
+        subprocess.Popen(
+            [sys.executable, "agent.py", "start"],
+            cwd=Path(__file__).parent,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        import time
+        time.sleep(1.5)
+
+
 # ══════════════════════════════════════════════════
 #  SIDEBAR
 # ══════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown("## 🛡️ RepoAgent")
+    st.markdown("## RepoAgent")
     st.caption("Local Directory Code Monitor")
     st.markdown("---")
 
@@ -369,122 +405,63 @@ if page == "📊 Dashboard":
     st.header("📊 Dashboard")
     st.markdown("---")
 
-    # ── Metrics Row ──
+    # ── Alerts ──
+    check_output = run_agent_command("check")
+
+    if "VIOLATIONS FOUND" in check_output:
+        violations = parse_violations(check_output)
+        st.warning(f"⚠️ {len(violations)} violation(s) detected")
+        with st.expander(f"View Violations ({len(violations)})"):
+            for v in violations:
+                st.markdown(
+                    f'<div class="violation-card"><strong>{v["type"]}</strong><br>'
+                    f'{v["file"]}: {v["message"]}</div>',
+                    unsafe_allow_html=True
+                )
+    else:
+        st.success("No rule violations detected")
+
+    st.markdown("---")
+
+    # ── Recent Activity ──
+    st.subheader("Recent Activity")
+
     entries = get_all_log_entries()
-
-    # Filter out .pid entries for meaningful stats
     real_entries = [e for e in entries if ".pid" not in e.get("path", "")]
-
-    # Count stats
-    total_events = len(real_entries)
-    ai_entries = [e for e in real_entries if "AI" in e.get("source", "")]
-    manual_entries = [e for e in real_entries if "AI" not in e.get("source", "")]
-    ai_percent = round((len(ai_entries) / total_events * 100) if total_events > 0 else 0)
-
-    # Unique files
-    unique_files = set(e.get("path", "") for e in real_entries)
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("📂 Files Tracked", len(unique_files))
-    with col2:
-        st.metric("📝 Total Events", total_events)
-    with col3:
-        st.metric("🤖 AI Edits", f"{ai_percent}%")
-    with col4:
-        st.metric("👤 Manual Edits", f"{100 - ai_percent}%")
-
-    st.markdown("---")
-
-    # ── Two Column Layout ──
-    left_col, right_col = st.columns([1, 1])
-
-    # ── Purpose / Motivation ──
-    with left_col:
-        st.subheader("🎯 Repository Purpose")
-        purpose = load_purpose()
-
-        # Extract just the mission statement for a cleaner look
-        mission_match = re.search(r'## Mission Statement\n\n(.+?)(?=\n---|\n##)', purpose, re.DOTALL)
-        if mission_match:
-            st.info(mission_match.group(1).strip())
-        else:
-            st.info(purpose[:500])
-
-        with st.expander("View Full Purpose Document"):
-            st.markdown(purpose)
-
-    # ── Deviation Alerts ──
-    with right_col:
-        st.subheader("⚠️ Alerts")
-
-        # Run rule check
-        check_output = run_agent_command("check")
-
-        if "VIOLATIONS FOUND" in check_output:
-            violations = parse_violations(check_output)
-            st.warning(f"{len(violations)} violation(s) detected")
-            with st.expander(f"View All Alerts ({len(violations)})", expanded=False):
-                for v in violations:
-                    st.markdown(
-                        f'<div class="violation-card">🔴 <strong>{v["type"]}</strong><br>'
-                        f'{v["file"]}: {v["message"]}</div>',
-                        unsafe_allow_html=True
-                    )
-        else:
-            st.markdown(
-                '<div class="success-card">✅ No rule violations detected</div>',
-                unsafe_allow_html=True
-            )
-
-    st.markdown("---")
-
-    # ── Recent Activity Feed ──
-    st.subheader("📌 Recent Activity")
-
     recent = real_entries[:10]
-    if recent:
-        # Table header
-        st.markdown(
-            '<div class="activity-row" style="border-bottom: 2px solid #30363d; padding-bottom: 8px;">'
-            '<strong style="color: #8b949e;">TIME</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; '
-            '<strong style="color: #8b949e;">EVENT</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; '
-            '<strong style="color: #8b949e;">FILE</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; '
-            '<strong style="color: #8b949e;">SOURCE</strong>'
-            '</div>',
-            unsafe_allow_html=True
-        )
 
+    if recent:
         for entry in recent:
             source = entry.get("source", "Unknown")
             if "AI" in source:
-                source_html = f'<span class="activity-source-ai">🤖 {source}</span>'
+                source_html = f'<span class="activity-source-ai">{source}</span>'
             else:
-                source_html = f'<span class="activity-source-manual">👤 {source}</span>'
-
-            event_icon = {
-                "FILE_MODIFIED": "✏️",
-                "FILE_CREATED": "🆕",
-                "FILE_DELETED": "🗑️",
-                "FILE_RENAMED": "📝"
-            }.get(entry.get("event", ""), "📄")
+                source_html = f'<span class="activity-source-manual">{source}</span>'
 
             short_path = entry.get("path", "").replace(os.getcwd() + "/", "")
             ts = entry.get("timestamp", "")
             time_str = ts.split(" ")[-1] if " " in ts else ts
+            event = entry.get("event", "")
+            branch = entry.get("branch", "")
+            branch_html = f' &nbsp; <span style="color: #58a6ff; font-weight: 500;">({branch})</span>' if branch else ""
 
             st.markdown(
                 f'<div class="activity-row">'
-                f'<span class="activity-time">{time_str}</span> &nbsp;&nbsp;&nbsp; '
-                f'<span class="activity-event">{event_icon} {entry.get("event", "")}</span> &nbsp;&nbsp;&nbsp; '
-                f'<span class="activity-file">{short_path}</span> &nbsp;&nbsp;&nbsp; '
-                f'{source_html}'
+                f'<span class="activity-time">{time_str}</span> &nbsp;&nbsp; '
+                f'<span class="activity-event">{event}</span> &nbsp;&nbsp; '
+                f'<span class="activity-file">{short_path}</span> &nbsp;&nbsp; '
+                f'{source_html}{branch_html}'
                 f'</div>',
                 unsafe_allow_html=True
             )
     else:
         st.info("No activity logged yet. Start the agent and make some file changes.")
+
+    st.markdown("---")
+
+    # ── Purpose ──
+    with st.expander("Repository Purpose"):
+        st.markdown(load_purpose())
 
 
 # ══════════════════════════════════════════════════
@@ -502,7 +479,7 @@ elif page == "📜 Activity Logs":
         source_filter = st.selectbox("🔍 Filter by Source", ["All", "AI Only", "Manual Only"])
 
     with col_event:
-        event_filter = st.selectbox("📂 Filter by Event", ["All", "FILE_MODIFIED", "FILE_CREATED", "FILE_DELETED", "FILE_RENAMED"])
+        event_filter = st.selectbox("📂 Filter by Event", ["All", "FILE_MODIFIED", "FILE_CREATED", "FILE_DELETED", "FILE_RENAMED", "BRANCH_SWITCHED"])
 
     st.markdown("---")
 
@@ -540,32 +517,27 @@ elif page == "📜 Activity Logs":
             total_shown += len(entries)
 
             # Clickable date header
-            with st.expander(f"📅 {date}  —  {len(entries)} event(s)", expanded=(date == available_dates[0])):
+            with st.expander(f"{date}  —  {len(entries)} event(s)", expanded=(date == available_dates[0])):
                 for entry in entries:
                     source = entry.get("source", "Unknown")
                     if "AI" in source:
-                        source_html = f'<span class="activity-source-ai">🤖 {source}</span>'
+                        source_html = f'<span class="log-source-ai">{source}</span>'
                     else:
-                        source_html = f'<span class="activity-source-manual">👤 {source}</span>'
-
-                    event_icon = {
-                        "FILE_MODIFIED": "✏️",
-                        "FILE_CREATED": "🆕",
-                        "FILE_DELETED": "🗑️",
-                        "FILE_RENAMED": "📝"
-                    }.get(entry.get("event", ""), "📄")
+                        source_html = f'<span class="log-source-manual">{source}</span>'
 
                     short_path = entry.get("path", "").replace(os.getcwd() + "/", "")
                     ts = entry.get("timestamp", "")
                     time_str = ts.split(" ")[-1] if " " in ts else ts
+                    branch = entry.get("branch", "")
+                    branch_html = f' &nbsp; <span style="color: #58a6ff; font-weight: 500;">({branch})</span>' if branch else ""
 
-                    # Entry header
+                    # Entry row
                     st.markdown(
                         f'<div class="log-entry">'
-                        f'<strong>{time_str}</strong> &nbsp; | &nbsp; '
-                        f'<span class="activity-event">{event_icon} {entry.get("event", "")}</span> &nbsp; | &nbsp; '
-                        f'{source_html}<br>'
-                        f'📄 <code>{short_path}</code>'
+                        f'<span class="log-time">{time_str}</span> &nbsp;&nbsp; '
+                        f'<span class="log-event">{entry.get("event", "")}</span> &nbsp;&nbsp; '
+                        f'{source_html}{branch_html}<br>'
+                        f'<code>{short_path}</code>'
                         f'</div>',
                         unsafe_allow_html=True
                     )

@@ -8,6 +8,7 @@ import sys
 import time
 import signal
 import argparse
+import threading
 from datetime import datetime
 from pathlib import Path
 import difflib
@@ -187,6 +188,18 @@ def detect_editor_source(file_path, diff_lines_added=0):
         return "Manual Edit"
 
 
+def get_current_branch():
+    """Get the current git branch name, or None if not a git repo"""
+    git_head = Path(".git/HEAD")
+    if not git_head.exists():
+        return None
+    try:
+        content = git_head.read_text().strip()
+        if content.startswith("ref: refs/heads/"):
+            return content[len("ref: refs/heads/"):]
+        return content[:8]
+    except Exception:
+        return None
 
 
 
@@ -285,7 +298,7 @@ class LogWriter:
         
     #     print(f"[{timestamp} {event_type}: {path}]")
 
-    def write(self, event_type, path, content=None, diff=None, source=None):
+    def write(self, event_type, path, content=None, diff=None, source=None, branch=None):
         """ Write a log entry """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_file = self.get_log_file()
@@ -295,6 +308,8 @@ class LogWriter:
         entry += f"PATH: {path}\n"
         if source:
             entry += f"SOURCE: {source}\n"
+        if branch:
+            entry += f"BRANCH: {branch}\n"
 
         if diff:
             entry += f"DIFF:\n{diff}\n"
@@ -320,6 +335,23 @@ class FileEventHandler(FileSystemEventHandler):
         self.config = config
         self.ignore_pattterns = ignore_patterns
         self.file_contents = {}
+        self._preload_file_contents()
+
+    def _preload_file_contents(self):
+        """Load existing file contents so first edits have diffs"""
+        extensions = self.config.get("watch_extensions", [])
+        for root, dirs, files in os.walk("."):
+            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), self.ignore_pattterns)]
+            for f in files:
+                fpath = os.path.join(root, f)
+                if should_ignore(fpath, self.ignore_pattterns):
+                    continue
+                if Path(fpath).suffix not in extensions:
+                    continue
+                abs_path = os.path.abspath(fpath)
+                content = self.get_file_content(abs_path)
+                if content:
+                    self.file_contents[abs_path] = content
 
     def should_process(self, path):
         """ Check if file should be processed """
@@ -351,7 +383,7 @@ class FileEventHandler(FileSystemEventHandler):
         
         content = self.get_file_content(event.src_path)
         self.file_contents[event.src_path] = content
-        self.log_writer.write("FILE_CREATED", event.src_path, content = content)
+        self.log_writer.write("FILE_CREATED", event.src_path, content=content, branch=get_current_branch())
 
     def on_modified(self, event):
         """ Handle file modification """
@@ -383,8 +415,7 @@ class FileEventHandler(FileSystemEventHandler):
 
 
         self.file_contents[event.src_path] = new_content
-        # self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff)
-        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff, source=source)
+        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff, source=source, branch=get_current_branch())
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {event.src_path} (via {source})")
 
         # Real-time rule checking (silent on success)
@@ -407,7 +438,7 @@ class FileEventHandler(FileSystemEventHandler):
             return
         
         self.file_contents.pop(event.src_path, None)
-        self.log_writer.write("FILE_DELETED", event.src_path)
+        self.log_writer.write("FILE_DELETED", event.src_path, branch=get_current_branch())
 
     def on_moved(self, event):
         """ Handle file rename/move """
@@ -440,8 +471,7 @@ class FileEventHandler(FileSystemEventHandler):
         source = detect_editor_source(event.dest_path, lines_added)
 
         self.file_contents[event.dest_path] = new_content
-        # self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff)
-        self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff, source=source)
+        self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff, source=source, branch=get_current_branch())
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_RENAMED: {event.dest_path} (via {source})")
 
         # Real-time rule checking for renamed files
@@ -455,6 +485,44 @@ class FileEventHandler(FileSystemEventHandler):
                     print(f"   └── {v['type']}: {v['message']}")
 
 
+
+class BranchWatcher:
+    """Polls .git/HEAD for branch switches and logs them"""
+
+    def __init__(self, log_writer, poll_interval=2):
+        self.log_writer = log_writer
+        self.poll_interval = poll_interval
+        self.current_branch = get_current_branch()
+        self._running = False
+        self._thread = None
+
+    def start(self):
+        if self.current_branch is None:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._thread.start()
+        print(f"  Branch watcher started (current: {self.current_branch})")
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+
+    def _poll_loop(self):
+        while self._running:
+            time.sleep(self.poll_interval)
+            new_branch = get_current_branch()
+            if new_branch and new_branch != self.current_branch:
+                old_branch = self.current_branch
+                self.current_branch = new_branch
+                self.log_writer.write(
+                    "BRANCH_SWITCHED",
+                    ".git/HEAD",
+                    content=f"Switched from '{old_branch}' to '{new_branch}'",
+                    branch=new_branch
+                )
+                print(f"  [{datetime.now().strftime('%H:%M:%S')}] BRANCH_SWITCHED: {old_branch} -> {new_branch}")
 
 
 # ====================================== REPORT ENGINE ======================================
@@ -692,21 +760,26 @@ def cmd_start():
     event_handler = FileEventHandler(log_writer, config, ignore_patterns)
     observer = Observer()
     observer.schedule(event_handler, ".", recursive=True)
-    
+
+    # Start branch watcher
+    branch_watcher = BranchWatcher(log_writer)
+
     # Save PID
     Path(PID_FILE).write_text(str(os.getpid()))
-    
+
     # Handle shutdown
     def shutdown(signum, frame):
         print("\nStopping agent...")
         observer.stop()
+        branch_watcher.stop()
         Path(PID_FILE).unlink(missing_ok=True)
         sys.exit(0)
-    
+
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
-    
+
     observer.start()
+    branch_watcher.start()
     print(f"Agent started. Watching: {os.getcwd()}")
     print("Press Ctrl+C to stop.")
     

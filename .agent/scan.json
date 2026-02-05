@@ -1,9 +1,119 @@
 {
-  "scanned_at": "2026-01-30T09:33:38.251736",
+  "scanned_at": "2026-02-05T12:29:16.146602",
   "files": {
-    "./api.py": {
-      "path": "./api.py",
-      "lines": 159,
+    "./UI.py": {
+      "path": "./UI.py",
+      "lines": 828,
+      "functions": [
+        "run_agent_command",
+        "is_agent_running",
+        "parse_log_entries",
+        "get_all_log_entries",
+        "get_log_dates",
+        "load_purpose",
+        "load_usage",
+        "get_violation_count",
+        "parse_check_output",
+        "parse_violations"
+      ],
+      "classes": [],
+      "imports": [
+        "import streamlit as st",
+        "import subprocess",
+        "import sys",
+        "import os",
+        "import re",
+        "import json",
+        "from pathlib import Path",
+        "from datetime import datetime",
+        "import time"
+      ]
+    },
+    "./agent.py": {
+      "path": "./agent.py",
+      "lines": 1106,
+      "functions": [
+        "load_config",
+        "load_ignore_patterns",
+        "load_standards",
+        "load_purpose",
+        "load_rules",
+        "load_usage",
+        "log_usage",
+        "detect_editor_source",
+        "process_running",
+        "scan_file",
+        "load_scan",
+        "should_ignore",
+        "__init__",
+        "get_log_file",
+        "write",
+        "__init__",
+        "_preload_file_contents",
+        "should_process",
+        "get_file_content",
+        "on_created",
+        "on_modified",
+        "on_deleted",
+        "on_moved",
+        "__init__",
+        "read_all_logs",
+        "generate_report",
+        "cmd_init",
+        "cmd_start",
+        "shutdown",
+        "cmd_stop",
+        "cmd_status",
+        "cmd_report",
+        "cmd_logs",
+        "cmd_scan",
+        "check_file",
+        "cmd_check",
+        "main"
+      ],
+      "classes": [
+        "LogWriter",
+        "FileEventHandler",
+        "ReportEngine"
+      ],
+      "imports": [
+        "import os",
+        "import sys",
+        "import time",
+        "import signal",
+        "import argparse",
+        "from datetime import datetime",
+        "from pathlib import Path",
+        "import difflib",
+        "import yaml",
+        "import json",
+        "from dotenv import load_dotenv",
+        "from watchdog.observers import Observer",
+        "from watchdog.events import FileSystemEventHandler",
+        "import openai",
+        "import subprocess",
+        "import platform",
+        "import ast",
+        "import re"
+      ]
+    },
+    "./app.py": {
+      "path": "./app.py",
+      "lines": 109,
+      "functions": [
+        "run_agent_command"
+      ],
+      "classes": [],
+      "imports": [
+        "import streamlit as st",
+        "import subprocess",
+        "import sys",
+        "from pathlib import Path"
+      ]
+    },
+    "./version3/api.py": {
+      "path": "./version3/api.py",
+      "lines": 208,
       "functions": [
         "get_users",
         "get_stats",
@@ -14,15 +124,17 @@
         "update_user",
         "bulk_create_users",
         "search_users",
-        "get_user_analytics"
+        "get_user_analytics",
+        "export_users",
+        "get_user_metrics"
       ],
       "classes": [],
       "imports": [
         "from flask import Flask, jsonify, request"
       ]
     },
-    "./agent.py": {
-      "path": "./agent.py",
+    "./version3/agent.py": {
+      "path": "./version3/agent.py",
       "lines": 998,
       "functions": [
         "load_config",
@@ -85,147 +197,12 @@
         "import ast",
         "import re"
       ]
-    },
-    "./version1/test1.py": {
-      "path": "./version1/test1.py",
-      "lines": 3,
-      "functions": [],
-      "classes": [],
-      "imports": []
-    },
-    "./version1/test.py": {
-      "path": "./version1/test.py",
-      "lines": 1,
-      "functions": [],
-      "classes": [],
-      "imports": []
-    },
-    "./version1/agentv1.py": {
-      "path": "./version1/agentv1.py",
-      "lines": 518,
-      "functions": [
-        "load_config",
-        "load_ignore_patterns",
-        "load_standards",
-        "should_ignore",
-        "__init__",
-        "get_log_file",
-        "write",
-        "__init__",
-        "should_process",
-        "get_file_content",
-        "on_created",
-        "on_modified",
-        "on_deleted",
-        "on_moved",
-        "__init__",
-        "read_all_logs",
-        "generate_report",
-        "cmd_init",
-        "cmd_start",
-        "shutdown",
-        "cmd_stop",
-        "cmd_status",
-        "cmd_report",
-        "cmd_logs",
-        "main"
-      ],
-      "classes": [
-        "LogWriter",
-        "FileEventHandler",
-        "ReportEngine"
-      ],
-      "imports": [
-        "import os",
-        "import sys",
-        "import time",
-        "import signal",
-        "import argparse",
-        "from datetime import datetime",
-        "from pathlib import Path",
-        "import difflib",
-        "import yaml",
-        "from dotenv import load_dotenv",
-        "from watchdog.observers import Observer",
-        "from watchdog.events import FileSystemEventHandler",
-        "import openai"
-      ]
-    },
-    "./version2/api.py": {
-      "path": "./version2/api.py",
-      "lines": 23,
-      "functions": [
-        "status",
-        "view_logs",
-        "get_db"
-      ],
-      "classes": [],
-      "imports": [
-        "from flask import Flask",
-        "import sqlite3"
-      ]
-    },
-    "./version2/agent.py": {
-      "path": "./version2/agent.py",
-      "lines": 680,
-      "functions": [
-        "load_config",
-        "load_ignore_patterns",
-        "load_standards",
-        "load_purpose",
-        "scan_file",
-        "load_scan",
-        "should_ignore",
-        "__init__",
-        "get_log_file",
-        "write",
-        "__init__",
-        "should_process",
-        "get_file_content",
-        "on_created",
-        "on_modified",
-        "on_deleted",
-        "on_moved",
-        "__init__",
-        "read_all_logs",
-        "generate_report",
-        "cmd_init",
-        "cmd_start",
-        "shutdown",
-        "cmd_stop",
-        "cmd_status",
-        "cmd_report",
-        "cmd_logs",
-        "cmd_scan",
-        "main"
-      ],
-      "classes": [
-        "LogWriter",
-        "FileEventHandler",
-        "ReportEngine"
-      ],
-      "imports": [
-        "import os",
-        "import sys",
-        "import time",
-        "import signal",
-        "import argparse",
-        "from datetime import datetime",
-        "from pathlib import Path",
-        "import difflib",
-        "import yaml",
-        "import json",
-        "from dotenv import load_dotenv",
-        "from watchdog.observers import Observer",
-        "from watchdog.events import FileSystemEventHandler",
-        "import openai"
-      ]
     }
   },
   "summary": {
-    "total_files": 7,
-    "total_lines": 2382,
-    "total_functions": 101,
-    "total_classes": 9
+    "total_files": 5,
+    "total_lines": 3249,
+    "total_functions": 94,
+    "total_classes": 6
   }
 }
