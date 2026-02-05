@@ -15,6 +15,10 @@ __pycache__/
 # Agent logs (can contain sensitive code)
 .agent/logs/
 
+# Agent runtime files (must not be tracked or checkout will break pause/pid)
+.agent/.pid
+.agent/.paused
+
 # OS files
 .DS_Store
 *.pdf
