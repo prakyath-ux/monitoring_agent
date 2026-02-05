@@ -305,5 +305,27 @@ def user_preferences():
 # ==================== END AFTERNOON BATCH ====================
 
 
+print("this is a demo test to check branch and source code logs")
+
+# ==================== DEMO BATCH - CLEAN LOG TEST ====================
+@app.route('/users/roles', methods=['GET'])
+def get_user_roles():
+    """Get all available user roles and permissions"""
+    roles = [
+        {"role": "admin", "level": 3, "permissions": ["read", "write", "delete", "manage"]},
+        {"role": "editor", "level": 2, "permissions": ["read", "write", "delete"]},
+        {"role": "viewer", "level": 1, "permissions": ["read"]},
+        {"role": "moderator", "level": 2, "permissions": ["read", "write", "flag", "ban"]},
+    ]
+    total_permissions = set()
+    for r in roles:
+        total_permissions.update(r["permissions"])
+    return jsonify({
+        "roles": roles,
+        "total_roles": len(roles),
+        "all_permissions": sorted(list(total_permissions))
+    })
+# ==================== END DEMO BATCH ====================
+
 if __name__ == '__main__':
     app.run(debug=True)
