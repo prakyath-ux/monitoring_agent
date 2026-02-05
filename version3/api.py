@@ -326,6 +326,8 @@ def get_user_roles():
         "all_permissions": sorted(list(total_permissions))
     })
 # ==================== END DEMO BATCH ====================
+print("conducting a test")
+print("conducting a test")
 
 if __name__ == '__main__':
     app.run(debug=True)
