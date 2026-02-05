@@ -355,6 +355,9 @@ def get_projects():
         "average_progress": round(avg_progress, 1)
     })
 # ==================== END DEV BATCH ====================
+print("final test on dev")
+print("s")
 
+print("Log test on dev")
 if __name__ == '__main__':
     app.run(debug=True)

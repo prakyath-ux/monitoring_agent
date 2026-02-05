@@ -340,6 +340,7 @@ class FileEventHandler(FileSystemEventHandler):
         self.config = config
         self.ignore_pattterns = ignore_patterns
         self.file_contents = {}
+        self._was_paused = False
         self._preload_file_contents()
 
     def _preload_file_contents(self):
@@ -378,12 +379,21 @@ class FileEventHandler(FileSystemEventHandler):
         except:
             return None 
         
+    def _refresh_cache_if_resumed(self):
+        """After resume from pause, refresh cache to avoid stale diffs from branch switches"""
+        if self._was_paused:
+            self._was_paused = False
+            self._preload_file_contents()
+            print(f"  [{datetime.now().strftime('%H:%M:%S')}] Cache refreshed after resume")
+
     def on_created(self, event):
         """ Handle file creation """
         if event.is_directory:
             return
         if is_paused():
+            self._was_paused = True
             return
+        self._refresh_cache_if_resumed()
 
         if not self.should_process(event.src_path):
             return
@@ -397,7 +407,9 @@ class FileEventHandler(FileSystemEventHandler):
         if event.is_directory:
             return
         if is_paused():
+            self._was_paused = True
             return
+        self._refresh_cache_if_resumed()
 
         if not self.should_process(event.src_path):
             return
@@ -443,7 +455,9 @@ class FileEventHandler(FileSystemEventHandler):
         if event.is_directory:
             return
         if is_paused():
+            self._was_paused = True
             return
+        self._refresh_cache_if_resumed()
 
         if not self.should_process(event.src_path):
             return
@@ -456,7 +470,9 @@ class FileEventHandler(FileSystemEventHandler):
         if event.is_directory:
             return
         if is_paused():
+            self._was_paused = True
             return
+        self._refresh_cache_if_resumed()
 
         if not self.should_process(event.dest_path):
             return
