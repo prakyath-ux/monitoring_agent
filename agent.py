@@ -34,6 +34,7 @@ CONFIG_FILE = f"{AGENT_DIR}/config.yaml"
 STANDARDS_FILE = f"{AGENT_DIR}/standards.md"
 IGNORE_FILE = f"{AGENT_DIR}/ignore.yaml"
 PID_FILE = f"{AGENT_DIR}/.pid"
+PAUSE_FILE = f"{AGENT_DIR}/.paused"
 PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
 SCAN_FILE = f"{AGENT_DIR}/scan.json"
 REPORTS_DIR = f"{AGENT_DIR}/reports"
@@ -201,6 +202,10 @@ def get_current_branch():
     except Exception:
         return None
 
+
+def is_paused():
+    """Check if the agent is paused (flag file exists)"""
+    return Path(PAUSE_FILE).exists()
 
 
 def scan_file(file_path):
@@ -377,7 +382,9 @@ class FileEventHandler(FileSystemEventHandler):
         """ Handle file creation """
         if event.is_directory:
             return
-        
+        if is_paused():
+            return
+
         if not self.should_process(event.src_path):
             return
         
@@ -389,7 +396,9 @@ class FileEventHandler(FileSystemEventHandler):
         """ Handle file modification """
         if event.is_directory:
             return
-        
+        if is_paused():
+            return
+
         if not self.should_process(event.src_path):
             return
         
@@ -433,7 +442,9 @@ class FileEventHandler(FileSystemEventHandler):
         """ handle file deletion """
         if event.is_directory:
             return
-        
+        if is_paused():
+            return
+
         if not self.should_process(event.src_path):
             return
         
@@ -443,6 +454,8 @@ class FileEventHandler(FileSystemEventHandler):
     def on_moved(self, event):
         """ Handle file rename/move """
         if event.is_directory:
+            return
+        if is_paused():
             return
 
         if not self.should_process(event.dest_path):
@@ -773,6 +786,7 @@ def cmd_start():
         observer.stop()
         branch_watcher.stop()
         Path(PID_FILE).unlink(missing_ok=True)
+        Path(PAUSE_FILE).unlink(missing_ok=True)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
@@ -802,8 +816,31 @@ def cmd_stop():
         print(f"Agent stopped (PID: {pid})")
     except OSError:
         print("Agent process not found.")
-    
+
     Path(PID_FILE).unlink(missing_ok=True)
+    Path(PAUSE_FILE).unlink(missing_ok=True)
+
+
+def cmd_pause():
+    """Pause the agent's file event logging (process stays alive)"""
+    if not Path(PID_FILE).exists():
+        print("Agent is not running.")
+        return
+    if Path(PAUSE_FILE).exists():
+        print("Agent is already paused.")
+        return
+    Path(PAUSE_FILE).write_text(datetime.now().isoformat())
+    print("Agent paused. File events will be ignored.")
+    print("Run 'python agent.py resume' to resume logging.")
+
+
+def cmd_resume():
+    """Resume the agent's file event logging"""
+    if not Path(PAUSE_FILE).exists():
+        print("Agent is not paused.")
+        return
+    Path(PAUSE_FILE).unlink()
+    print("Agent resumed. File events will be logged again.")
 
 
 def cmd_status():
@@ -1132,6 +1169,12 @@ def main():
     #check
     subparsers.add_parser("check", help="Check code against rules")
 
+    # pause
+    subparsers.add_parser("pause", help="Pause event logging (agent stays alive)")
+
+    # resume
+    subparsers.add_parser("resume", help="Resume event logging")
+
     
     args = parser.parse_args()
     
@@ -1151,6 +1194,10 @@ def main():
         cmd_scan()
     elif args.command == "check":
         cmd_check()
+    elif args.command == "pause":
+        cmd_pause()
+    elif args.command == "resume":
+        cmd_resume()
     else:
         parser.print_help()
 

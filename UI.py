@@ -744,7 +744,24 @@ elif page == "Settings":
     with tab1:
         config_path = Path(CONFIG_FILE)
         if config_path.exists():
-            st.code(config_path.read_text(), language="yaml")
+            if st.session_state.get("edit_config"):
+                config_content = st.text_area("config.yaml", config_path.read_text(), height=300, key="config_editor")
+                col_save, col_cancel, _ = st.columns([1, 1, 4])
+                with col_save:
+                    if st.button("Save", key="save_config", use_container_width=True):
+                        config_path.write_text(config_content)
+                        st.session_state.edit_config = False
+                        st.success("Config saved")
+                        st.rerun()
+                with col_cancel:
+                    if st.button("Cancel", key="cancel_config", use_container_width=True):
+                        st.session_state.edit_config = False
+                        st.rerun()
+            else:
+                st.code(config_path.read_text(), language="yaml")
+                if st.button("Edit", key="edit_config_btn"):
+                    st.session_state.edit_config = True
+                    st.rerun()
         else:
             st.warning("config.yaml not found. Run `python agent.py init`")
 
@@ -752,13 +769,51 @@ elif page == "Settings":
     with tab2:
         rules_path = Path(RULES_FILE)
         if rules_path.exists():
-            st.code(rules_path.read_text(), language="yaml")
+            if st.session_state.get("edit_rules"):
+                rules_content = st.text_area("rules.yaml", rules_path.read_text(), height=400, key="rules_editor")
+                col_save, col_cancel, _ = st.columns([1, 1, 4])
+                with col_save:
+                    if st.button("Save", key="save_rules", use_container_width=True):
+                        rules_path.write_text(rules_content)
+                        st.session_state.edit_rules = False
+                        st.success("Rules saved")
+                        st.rerun()
+                with col_cancel:
+                    if st.button("Cancel", key="cancel_rules", use_container_width=True):
+                        st.session_state.edit_rules = False
+                        st.rerun()
+            else:
+                st.code(rules_path.read_text(), language="yaml")
+                if st.button("Edit", key="edit_rules_btn"):
+                    st.session_state.edit_rules = True
+                    st.rerun()
         else:
             st.warning("rules.yaml not found. Run `python agent.py init`")
 
     # Purpose tab
     with tab3:
-        st.markdown(load_purpose())
+        purpose_path = Path(PURPOSE_FILE)
+        if purpose_path.exists():
+            if st.session_state.get("edit_purpose"):
+                purpose_content = st.text_area("purpose.md", purpose_path.read_text(), height=400, key="purpose_editor")
+                col_save, col_cancel, _ = st.columns([1, 1, 4])
+                with col_save:
+                    if st.button("Save", key="save_purpose", use_container_width=True):
+                        purpose_path.write_text(purpose_content)
+                        st.session_state.edit_purpose = False
+                        st.success("Purpose saved")
+                        st.rerun()
+                with col_cancel:
+                    if st.button("Cancel", key="cancel_purpose", use_container_width=True):
+                        st.session_state.edit_purpose = False
+                        st.rerun()
+            else:
+                st.markdown(load_purpose())
+                if st.button("Edit", key="edit_purpose_btn"):
+                    st.session_state.edit_purpose = True
+                    st.rerun()
+        else:
+            st.warning("purpose.md not found. Run `python agent.py init`")
 
     # Usage tab
     with tab4:
