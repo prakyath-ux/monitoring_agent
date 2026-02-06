@@ -1,7 +1,7 @@
 # Local Directory Monitoring Agent
 
-> **Status: Phase 2 Complete & Demoed**
-> **Last Updated: 30 January 2026**
+> **Status: Phase 3 POC Complete & Tested**
+> **Last Updated: 6 February 2026**
 
 ## Project Vision
 
@@ -67,12 +67,64 @@ DIFF: (unified diff of changes)
 
 ---
 
+## Phase 3 Completed (6 Feb 2026)
+
+### Features Implemented
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | **Pause/Resume** - Pause agent during branch switches to avoid stale diffs | ✅ Done |
+| 2 | **Cache Refresh** - Re-read all files from disk after resume to sync RAM with disk | ✅ Done |
+| 3 | **Branch Detection** - Detect current git branch and log it with every event | ✅ Done |
+| 4 | **Branch Switch Logging** - BranchWatcher polls `.git/HEAD`, logs BRANCH_SWITCHED events | ✅ Done |
+| 5 | **Streamlit UI** - Full dashboard with start/stop/pause/resume, activity logs, analytics | ✅ Done |
+| 6 | **UI Auto-Start** - Agent auto-starts when UI launches (if not already running) | ✅ Done |
+| 7 | **Cost hidden from reports** - Report generation no longer displays API cost to user | ✅ Done |
+
+### POC Testing Completed (6 Feb 2026)
+
+Successfully tested full branch-switch workflow:
+1. Agent running on `dev` → edit file → clean 1-line diff logged
+2. Pause → add → commit → checkout `dev2` → resume → cache refreshed
+3. Edit on `dev2` → clean 1-line diff logged (no stale branch diffs)
+4. Pause → add → commit → checkout `dev` → resume → cache refreshed
+5. Edit on `dev` → clean 1-line diff logged
+6. `BRANCH_SWITCHED` events correctly logged on every checkout
+
+### Key Mechanism: Pause/Resume Cache Refresh
+
+**Problem:** Branch switches change files on disk but agent's RAM cache (`self.file_contents`) still holds old branch content. Without pause, the agent logs massive diffs of every file that differs between branches.
+
+**Solution:**
+- `pause` → agent ignores all file events, sets `_was_paused` flag
+- User commits, switches branch
+- `resume` → on first file event, `_refresh_cache_if_resumed()` re-reads all watched files from disk into RAM
+- Subsequent edits produce clean, accurate diffs
+
+### Log Entry Format (Updated)
+```
+[timestamp] FILE_MODIFIED | FILE_RENAMED | FILE_CREATED | FILE_DELETED | BRANCH_SWITCHED
+PATH: /path/to/file
+SOURCE: Claude Code (AI) | VS Code | Cursor | Manual Edit
+BRANCH: dev | main | feature-x
+DIFF: (unified diff of changes)
+```
+
+### Known Issues
+
+- **cmd_pause PID gating**: On `dev` branch, `cmd_pause()` still requires PID file to exist. Fix applied on `dev2` branch (creates `.paused` file regardless of PID, with warning). Needs merging to `dev`.
+- **Atomic writes**: Still triggers `FILE_RENAMED` + `FILE_DELETED` instead of `FILE_MODIFIED` — handled correctly by `on_moved()`.
+
+---
+
 ## Current Commands
 
 ```bash
 python agent.py init       # Initialize .agent/ folder
 python agent.py start      # Start monitoring (foreground)
 python agent.py stop       # Stop monitoring
+python agent.py pause      # Pause logging (use before branch switch)
+python agent.py resume     # Resume logging (refreshes cache from disk)
 python agent.py status     # Check if agent is running
 python agent.py report     # Generate AI report from logs
 python agent.py logs       # View recent activity logs
@@ -169,29 +221,30 @@ else:
 
 ---
 
-## Phase 3 Roadmap (Future)
+## Phase 4 Roadmap (Next)
 
 | Feature | Purpose | Priority |
 |---------|---------|----------|
+| **Prompt capturing** | Capture prompts users give to AI tools that result in code changes | High |
 | **Report integration** | Include AI vs manual breakdown in reports | High |
-| **Conflict detection** | Identify when changes conflict with existing code | High |
+| **Conflict detection** | Identify when changes conflict with existing code | Medium |
 | **Solution suggestions** | Propose fixes for detected issues (via LLM) | Medium |
-| **Auto-fix mode** | Automatically apply safe fixes with approval | Medium |
+| **Auto-fix mode** | Automatically apply safe fixes with approval | Low |
 | **Normalize event types** | Map FILE_RENAMED → FILE_MODIFIED for atomic writes | Low |
 
-### Phase 3 Discussion Topics
+### Phase 4 Discussion Topics
 
-1. **Report AI/Manual Breakdown**
+1. **Prompt Capturing**
+   - Capture what users typed into AI tools (Claude Code, Cursor, etc.) that led to code changes
+   - Link prompts to the resulting file diffs in logs
+   - Approach TBD — needs research into how AI tools expose prompt history
+
+2. **Report AI/Manual Breakdown**
    - Parse logs for SOURCE field
    - Calculate: X% AI-generated, Y% manual edits
    - List which files were AI-modified
 
-2. **Conflict Detection**
+3. **Conflict Detection**
    - Compare changes against `purpose.md` intent
    - Flag when AI introduces patterns that conflict with existing code
    - Detect when AI duplicates existing functionality
-
-3. **Solution Suggestions**
-   - When violations detected, use LLM to suggest fixes
-   - Show diff preview before applying
-   - Respect rules.yaml constraints

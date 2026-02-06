@@ -1,7 +1,7 @@
 {
-  "total_input_tokens": 10999,
-  "total_output_tokens": 805,
-  "total_cost_usd": 0.0355475,
+  "total_input_tokens": 78035,
+  "total_output_tokens": 3435,
+  "total_cost_usd": 0.22943750000000002,
   "requests": [
     {
       "timestamp": "2026-01-30T11:47:39.658845",
@@ -10,6 +10,30 @@
       "input_tokens": 10999,
       "output_tokens": 805,
       "cost_usd": 0.035548
+    },
+    {
+      "timestamp": "2026-02-05T12:14:46.673878",
+      "model": "gpt-4o",
+      "purpose": "report",
+      "input_tokens": 37854,
+      "output_tokens": 793,
+      "cost_usd": 0.102565
+    },
+    {
+      "timestamp": "2026-02-05T13:38:21.527930",
+      "model": "gpt-4o",
+      "purpose": "report",
+      "input_tokens": 13505,
+      "output_tokens": 928,
+      "cost_usd": 0.043042
+    },
+    {
+      "timestamp": "2026-02-06T08:42:06.318733",
+      "model": "gpt-4o",
+      "purpose": "report",
+      "input_tokens": 15677,
+      "output_tokens": 909,
+      "cost_usd": 0.048282
     }
   ]
 }

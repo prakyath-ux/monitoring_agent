@@ -8,6 +8,7 @@ import sys
 import time
 import signal
 import argparse
+import threading
 from datetime import datetime
 from pathlib import Path
 import difflib
@@ -33,6 +34,7 @@ CONFIG_FILE = f"{AGENT_DIR}/config.yaml"
 STANDARDS_FILE = f"{AGENT_DIR}/standards.md"
 IGNORE_FILE = f"{AGENT_DIR}/ignore.yaml"
 PID_FILE = f"{AGENT_DIR}/.pid"
+PAUSE_FILE = f"{AGENT_DIR}/.paused"
 PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
 SCAN_FILE = f"{AGENT_DIR}/scan.json"
 REPORTS_DIR = f"{AGENT_DIR}/reports"
@@ -169,6 +171,8 @@ def detect_editor_source(file_path, diff_lines_added=0):
     claude_running = process_running('claude')
     cursor_running = process_running('Cursor')
     vscode_running = process_running('Code')
+    intellij_running = process_running('idea')
+    pycharm_running = process_running('pycharm')
     is_bulk_change = diff_lines_added > 10
     
     if claude_running and is_bulk_change:
@@ -181,13 +185,37 @@ def detect_editor_source(file_path, diff_lines_added=0):
         return "Cursor (AI)"
     elif cursor_running:
         return "Cursor"
+    elif intellij_running and is_bulk_change:
+        return "IntelliJ (AI Tool)"
+    elif pycharm_running and is_bulk_change:
+        return "PyCharm (AI Tool)"
+    elif intellij_running:
+        return "IntelliJ"
+    elif pycharm_running:
+        return "PyCharm"
     elif is_bulk_change:
         return "AI Tool (likely)"
     else:
         return "Manual Edit"
 
 
+def get_current_branch():
+    """Get the current git branch name, or None if not a git repo"""
+    git_head = Path(".git/HEAD")
+    if not git_head.exists():
+        return None
+    try:
+        content = git_head.read_text().strip()
+        if content.startswith("ref: refs/heads/"):
+            return content[len("ref: refs/heads/"):]
+        return content[:8]
+    except Exception:
+        return None
 
+
+def is_paused():
+    """Check if the agent is paused (flag file exists)"""
+    return Path(PAUSE_FILE).exists()
 
 
 def scan_file(file_path):
@@ -285,7 +313,7 @@ class LogWriter:
         
     #     print(f"[{timestamp} {event_type}: {path}]")
 
-    def write(self, event_type, path, content=None, diff=None, source=None):
+    def write(self, event_type, path, content=None, diff=None, source=None, branch=None):
         """ Write a log entry """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_file = self.get_log_file()
@@ -295,6 +323,8 @@ class LogWriter:
         entry += f"PATH: {path}\n"
         if source:
             entry += f"SOURCE: {source}\n"
+        if branch:
+            entry += f"BRANCH: {branch}\n"
 
         if diff:
             entry += f"DIFF:\n{diff}\n"
@@ -320,6 +350,24 @@ class FileEventHandler(FileSystemEventHandler):
         self.config = config
         self.ignore_pattterns = ignore_patterns
         self.file_contents = {}
+        self._was_paused = False
+        self._preload_file_contents()
+
+    def _preload_file_contents(self):
+        """Load existing file contents so first edits have diffs"""
+        extensions = self.config.get("watch_extensions", [])
+        for root, dirs, files in os.walk("."):
+            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), self.ignore_pattterns)]
+            for f in files:
+                fpath = os.path.join(root, f)
+                if should_ignore(fpath, self.ignore_pattterns):
+                    continue
+                if Path(fpath).suffix not in extensions:
+                    continue
+                abs_path = os.path.abspath(fpath)
+                content = self.get_file_content(abs_path)
+                if content:
+                    self.file_contents[abs_path] = content
 
     def should_process(self, path):
         """ Check if file should be processed """
@@ -341,23 +389,38 @@ class FileEventHandler(FileSystemEventHandler):
         except:
             return None 
         
+    def _refresh_cache_if_resumed(self):
+        """After resume from pause, refresh cache to avoid stale diffs from branch switches"""
+        if self._was_paused:
+            self._was_paused = False
+            self._preload_file_contents()
+            print(f"  [{datetime.now().strftime('%H:%M:%S')}] Cache refreshed after resume")
+
     def on_created(self, event):
         """ Handle file creation """
         if event.is_directory:
             return
-        
+        if is_paused():
+            self._was_paused = True
+            return
+        self._refresh_cache_if_resumed()
+
         if not self.should_process(event.src_path):
             return
         
         content = self.get_file_content(event.src_path)
         self.file_contents[event.src_path] = content
-        self.log_writer.write("FILE_CREATED", event.src_path, content = content)
+        self.log_writer.write("FILE_CREATED", event.src_path, content=content, branch=get_current_branch())
 
     def on_modified(self, event):
         """ Handle file modification """
         if event.is_directory:
             return
-        
+        if is_paused():
+            self._was_paused = True
+            return
+        self._refresh_cache_if_resumed()
+
         if not self.should_process(event.src_path):
             return
         
@@ -383,14 +446,14 @@ class FileEventHandler(FileSystemEventHandler):
 
 
         self.file_contents[event.src_path] = new_content
-        # self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff)
-        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff, source=source)
+        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff, source=source, branch=get_current_branch())
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {event.src_path} (via {source})")
 
         # Real-time rule checking (silent on success)
         rules_data = load_rules()
         if rules_data and "rules" in rules_data:
-            violations = check_file(event.src_path, rules_data["rules"])
+            results = check_file(event.src_path, rules_data["rules"])
+            violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
                 print(f"\n⚠️  VIOLATIONS in {event.src_path}:")
                 for v in violations:
@@ -401,17 +464,25 @@ class FileEventHandler(FileSystemEventHandler):
         """ handle file deletion """
         if event.is_directory:
             return
-        
+        if is_paused():
+            self._was_paused = True
+            return
+        self._refresh_cache_if_resumed()
+
         if not self.should_process(event.src_path):
             return
         
         self.file_contents.pop(event.src_path, None)
-        self.log_writer.write("FILE_DELETED", event.src_path)
+        self.log_writer.write("FILE_DELETED", event.src_path, branch=get_current_branch())
 
     def on_moved(self, event):
         """ Handle file rename/move """
         if event.is_directory:
             return
+        if is_paused():
+            self._was_paused = True
+            return
+        self._refresh_cache_if_resumed()
 
         if not self.should_process(event.dest_path):
             return
@@ -439,20 +510,58 @@ class FileEventHandler(FileSystemEventHandler):
         source = detect_editor_source(event.dest_path, lines_added)
 
         self.file_contents[event.dest_path] = new_content
-        # self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff)
-        self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff, source=source)
+        self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff, source=source, branch=get_current_branch())
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_RENAMED: {event.dest_path} (via {source})")
 
         # Real-time rule checking for renamed files
         rules_data = load_rules()
         if rules_data and "rules" in rules_data:
-            violations = check_file(event.dest_path, rules_data["rules"])
+            results = check_file(event.dest_path, rules_data["rules"])
+            violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
                 print(f"\n⚠️  VIOLATIONS in {event.dest_path}:")
                 for v in violations:
                     print(f"   └── {v['type']}: {v['message']}")
 
 
+
+class BranchWatcher:
+    """Polls .git/HEAD for branch switches and logs them"""
+
+    def __init__(self, log_writer, poll_interval=2):
+        self.log_writer = log_writer
+        self.poll_interval = poll_interval
+        self.current_branch = get_current_branch()
+        self._running = False
+        self._thread = None
+
+    def start(self):
+        if self.current_branch is None:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._thread.start()
+        print(f"  Branch watcher started (current: {self.current_branch})")
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+
+    def _poll_loop(self):
+        while self._running:
+            time.sleep(self.poll_interval)
+            new_branch = get_current_branch()
+            if new_branch and new_branch != self.current_branch:
+                old_branch = self.current_branch
+                self.current_branch = new_branch
+                self.log_writer.write(
+                    "BRANCH_SWITCHED",
+                    ".git/HEAD",
+                    content=f"Switched from '{old_branch}' to '{new_branch}'",
+                    branch=new_branch
+                )
+                print(f"  [{datetime.now().strftime('%H:%M:%S')}] BRANCH_SWITCHED: {old_branch} -> {new_branch}")
 
 
 # ====================================== REPORT ENGINE ======================================
@@ -544,14 +653,13 @@ Format the report in clean markdown.
 
         # Log usage
         model = self.config.get("model", "gpt-4o")
-        cost = log_usage(
+        log_usage(
             model=model,
             input_tokens=response.usage.prompt_tokens,
             output_tokens=response.usage.completion_tokens,
             purpose="report"
         )
         print(f"  Tokens: {response.usage.prompt_tokens} in / {response.usage.completion_tokens} out")
-        print(f"  Cost: ${cost:.4f}")
 
         return response.choices[0].message.content
         
@@ -690,21 +798,27 @@ def cmd_start():
     event_handler = FileEventHandler(log_writer, config, ignore_patterns)
     observer = Observer()
     observer.schedule(event_handler, ".", recursive=True)
-    
+
+    # Start branch watcher
+    branch_watcher = BranchWatcher(log_writer)
+
     # Save PID
     Path(PID_FILE).write_text(str(os.getpid()))
-    
+
     # Handle shutdown
     def shutdown(signum, frame):
         print("\nStopping agent...")
         observer.stop()
+        branch_watcher.stop()
         Path(PID_FILE).unlink(missing_ok=True)
+        Path(PAUSE_FILE).unlink(missing_ok=True)
         sys.exit(0)
-    
+
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
-    
+
     observer.start()
+    branch_watcher.start()
     print(f"Agent started. Watching: {os.getcwd()}")
     print("Press Ctrl+C to stop.")
     
@@ -727,8 +841,31 @@ def cmd_stop():
         print(f"Agent stopped (PID: {pid})")
     except OSError:
         print("Agent process not found.")
-    
+
     Path(PID_FILE).unlink(missing_ok=True)
+    Path(PAUSE_FILE).unlink(missing_ok=True)
+
+
+def cmd_pause():
+    """Pause the agent's file event logging (process stays alive)"""
+    if not Path(PID_FILE).exists():
+        print("Agent is not running.")
+        return
+    if Path(PAUSE_FILE).exists():
+        print("Agent is already paused.")
+        return
+    Path(PAUSE_FILE).write_text(datetime.now().isoformat())
+    print("Agent paused. File events will be ignored.")
+    print("Run 'python agent.py resume' to resume logging.")
+
+
+def cmd_resume():
+    """Resume the agent's file event logging"""
+    if not Path(PAUSE_FILE).exists():
+        print("Agent is not paused.")
+        return
+    Path(PAUSE_FILE).unlink()
+    print("Agent resumed. File events will be logged again.")
 
 
 def cmd_status():
@@ -850,18 +987,19 @@ def cmd_scan():
 
 
 def check_file(file_path, rules):
-    """Check a single file against rules, return list of violations"""
+    """Check a single file against rules, return list of violations and advisories"""
     import ast
     import re
 
-    violations = []
+    results = []
     file_name = os.path.basename(file_path)
 
     #check forbidden file names
     forbidden_files = rules.get("forbidden_files", [])
     if file_name in forbidden_files:
-        violations.append({
+        results.append({
             "type": "FORBIDDEN_FILE",
+            "severity": "violation",
             "message": f"File name '{file_name}' is not allowed"
         })
 
@@ -871,14 +1009,15 @@ def check_file(file_path, rules):
             content = f.read()
             lines = content.split('\n')
     except Exception as e:
-        return [{"type": "ERROR", "message": f"Could not read file {e}"}]
-    
-    # Check max file lines
+        return [{"type": "ERROR", "severity": "violation", "message": f"Could not read file {e}"}]
+
+    # Check file lines (advisory, not violation)
     max_file_lines = rules.get("max_file_lines", 800)
     if len(lines) > max_file_lines:
-        violations.append({
+        results.append({
             "type": "FILE_TOO_LONG",
-            "message": f"File has {len(lines)} lines (max: {max_file_lines})"
+            "severity": "advisory",
+            "message": f"File has {len(lines)} lines (threshold: {max_file_lines}) — consider reviewing"
         })
 
     #check forbidden patterns
@@ -888,8 +1027,9 @@ def check_file(file_path, rules):
         message = pattern_rule.get("message", "Forbidden pattern found")
         for i, line in enumerate(lines, 1):
             if re.search(pattern, line):
-                violations.append({
+                results.append({
                     "type": "FORBIDDEN_PATTERN",
+                    "severity": "violation",
                     "message": f"{message} (line {i})"
                 })
 
@@ -898,7 +1038,7 @@ def check_file(file_path, rules):
         try:
             tree = ast.parse(content)
         except SyntaxError:
-            return violations
+            return results
 
         # Check forbidden imports
         forbidden_imports = rules.get("forbidden_imports", [])
@@ -906,29 +1046,32 @@ def check_file(file_path, rules):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name in forbidden_imports:
-                        violations.append({
+                        results.append({
                             "type": "FORBIDDEN_IMPORT",
+                            "severity": "violation",
                             "message": f"'{alias.name}' import not allowed (line {node.lineno})"
                         })
             elif isinstance(node, ast.ImportFrom):
                 if node.module and node.module.split('.')[0] in forbidden_imports:
-                    violations.append({
+                    results.append({
                         "type": "FORBIDDEN_IMPORT",
+                        "severity": "violation",
                         "message": f"'{node.module}' import not allowed (line {node.lineno})"
                     })
-        
-        # Check function line counts
+
+        # Check function line counts (advisory, not violation)
         max_func_lines = rules.get("max_function_lines", 50)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 func_lines = node.end_lineno - node.lineno + 1
                 if func_lines > max_func_lines:
-                    violations.append({
+                    results.append({
                         "type": "FUNCTION_TOO_LONG",
-                        "message": f"'{node.name}' has {func_lines} lines (max: {max_func_lines})"
+                        "severity": "advisory",
+                        "message": f"'{node.name}' has {func_lines} lines (threshold: {max_func_lines}) — consider refactoring"
                     })
-    
-    return violations
+
+    return results
 
 
 def cmd_check():
@@ -936,62 +1079,82 @@ def cmd_check():
     if not Path(AGENT_DIR).exists():
         print("Agent not initialized. Run 'python agent.py init' first.")
         return
-    
+
     rules_data = load_rules()
     if not rules_data or "rules" not in rules_data:
         print("No rules.yaml found or empty. Run 'python agent.py init' to create default rules.")
         return
-    
+
     rules = rules_data["rules"]
     config = load_config()
     extensions = config.get("watch_extensions", [".py"])
     ignore_patterns = load_ignore_patterns()
-    
+
     print("Checking codebase against rules...\n")
-    
+
     all_violations = {}
+    all_advisories = {}
     files_checked = 0
     files_passed = 0
     files_failed = 0
-    
+
     for root, dirs, files in os.walk("."):
         dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
-        
+
         for file in files:
             file_path = os.path.join(root, file)
-            
+
             if should_ignore(file_path, ignore_patterns):
                 continue
-            
+
             ext = Path(file_path).suffix
             if ext not in extensions:
                 continue
-            
+
             files_checked += 1
-            violations = check_file(file_path, rules)
-            
+            results = check_file(file_path, rules)
+
+            violations = [r for r in results if r.get("severity") == "violation"]
+            advisories = [r for r in results if r.get("severity") == "advisory"]
+
             if violations:
                 all_violations[file_path] = violations
                 files_failed += 1
+            elif advisories:
+                files_passed += 1
             else:
                 files_passed += 1
-    
-    # Print results
+
+            if advisories:
+                all_advisories[file_path] = advisories
+
+    # Print violations
     if all_violations:
         total_violations = sum(len(v) for v in all_violations.values())
-        print(f"❌ VIOLATIONS FOUND: {total_violations}\n")
-        
+        print(f"VIOLATIONS FOUND: {total_violations}\n")
+
         for file_path, violations in all_violations.items():
             print(f"[{file_path}]")
             for v in violations:
                 print(f"  ├── {v['type']}: {v['message']}")
             print()
     else:
-        print("✅ No violations found!\n")
-    
+        print("No violations found.\n")
+
+    # Print advisories
+    if all_advisories:
+        total_advisories = sum(len(a) for a in all_advisories.values())
+        print(f"ADVISORIES: {total_advisories}\n")
+
+        for file_path, advisories in all_advisories.items():
+            print(f"[{file_path}]")
+            for a in advisories:
+                print(f"  ├── {a['type']}: {a['message']}")
+            print()
+
     print(f"Files checked: {files_checked}")
-    print(f"✅ Passed: {files_passed}")
-    print(f"❌ Failed: {files_failed}")
+    print(f"Passed: {files_passed}")
+    print(f"Failed: {files_failed}")
 
 
 
@@ -1031,6 +1194,12 @@ def main():
     #check
     subparsers.add_parser("check", help="Check code against rules")
 
+    # pause
+    subparsers.add_parser("pause", help="Pause event logging (agent stays alive)")
+
+    # resume
+    subparsers.add_parser("resume", help="Resume event logging")
+
     
     args = parser.parse_args()
     
@@ -1050,6 +1219,10 @@ def main():
         cmd_scan()
     elif args.command == "check":
         cmd_check()
+    elif args.command == "pause":
+        cmd_pause()
+    elif args.command == "resume":
+        cmd_resume()
     else:
         parser.print_help()
 

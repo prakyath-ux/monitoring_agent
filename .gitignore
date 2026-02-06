@@ -2,7 +2,7 @@
 .env
 .env.local
 .env.*.local
-
+.claude/
 # Virtual environment
 venv/
 .venv/
@@ -14,6 +14,13 @@ __pycache__/
 
 # Agent logs (can contain sensitive code)
 .agent/logs/
+.agent/scan.json
+.agent/reports/
+.agent/usage/
+
+# Agent runtime files (must not be tracked or checkout will break pause/pid)
+.agent/.pid
+.agent/.paused
 
 # OS files
 .DS_Store
