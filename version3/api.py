@@ -361,3 +361,26 @@ print("s")
 print("Log test on dev")
 if __name__ == '__main__':
     app.run(debug=True)
+
+print("a and b")
+
+print("log test for 6th Feb")
+
+# ==================== PAUSE FIX TEST ====================
+@app.route('/users/sessions', methods=['GET'])
+def get_user_sessions():
+    """Get active user sessions - testing pause fix"""
+    user_id = request.args.get('user_id', None, type=int)
+    sessions = [
+        {"session_id": "s1", "user_id": 1, "device": "Desktop", "ip": "192.168.1.10", "started": "2026-02-06T08:00:00"},
+        {"session_id": "s2", "user_id": 2, "device": "Mobile", "ip": "192.168.1.20", "started": "2026-02-06T09:15:00"},
+        {"session_id": "s3", "user_id": 1, "device": "Tablet", "ip": "192.168.1.30", "started": "2026-02-06T10:30:00"},
+        {"session_id": "s4", "user_id": 3, "device": "Desktop", "ip": "192.168.1.40", "started": "2026-02-06T11:00:00"},
+    ]
+    if user_id:
+        sessions = [s for s in sessions if s["user_id"] == user_id]
+    return jsonify({
+        "sessions": sessions,
+        "active_count": len(sessions)
+    })
+# ==================== END PAUSE FIX TEST ====================
