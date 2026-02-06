@@ -189,10 +189,6 @@ def detect_editor_source(file_path, diff_lines_added=0):
         return "IntelliJ (AI Tool)"
     elif pycharm_running and is_bulk_change:
         return "PyCharm (AI Tool)"
-    elif vscode_running:
-        return "VS Code"
-    elif cursor_running:
-        return "Cursor"
     elif intellij_running:
         return "IntelliJ"
     elif pycharm_running:
