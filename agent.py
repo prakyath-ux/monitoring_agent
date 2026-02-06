@@ -643,14 +643,13 @@ Format the report in clean markdown.
 
         # Log usage
         model = self.config.get("model", "gpt-4o")
-        cost = log_usage(
+        log_usage(
             model=model,
             input_tokens=response.usage.prompt_tokens,
             output_tokens=response.usage.completion_tokens,
             purpose="report"
         )
         print(f"  Tokens: {response.usage.prompt_tokens} in / {response.usage.completion_tokens} out")
-        print(f"  Cost: ${cost:.4f}")
 
         return response.choices[0].message.content
         

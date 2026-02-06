@@ -384,3 +384,6 @@ def get_user_sessions():
         "active_count": len(sessions)
     })
 # ==================== END PAUSE FIX TEST ====================
+
+
+print("before pause test")
