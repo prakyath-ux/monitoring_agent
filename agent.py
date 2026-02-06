@@ -171,6 +171,8 @@ def detect_editor_source(file_path, diff_lines_added=0):
     claude_running = process_running('claude')
     cursor_running = process_running('Cursor')
     vscode_running = process_running('Code')
+    intellij_running = process_running('idea')
+    pycharm_running = process_running('pycharm')
     is_bulk_change = diff_lines_added > 10
     
     if claude_running and is_bulk_change:
@@ -183,6 +185,18 @@ def detect_editor_source(file_path, diff_lines_added=0):
         return "Cursor (AI)"
     elif cursor_running:
         return "Cursor"
+    elif intellij_running and is_bulk_change:
+        return "IntelliJ (AI Tool)"
+    elif pycharm_running and is_bulk_change:
+        return "PyCharm (AI Tool)"
+    elif vscode_running:
+        return "VS Code"
+    elif cursor_running:
+        return "Cursor"
+    elif intellij_running:
+        return "IntelliJ"
+    elif pycharm_running:
+        return "PyCharm"
     elif is_bulk_change:
         return "AI Tool (likely)"
     else:
