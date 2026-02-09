@@ -28,19 +28,22 @@ import openai
 
 # ================================= CONFIGURATION ===================================
 
-AGENT_DIR = ".agent"
-LOGS_DIR = f"{AGENT_DIR}/logs"
-CONFIG_FILE = f"{AGENT_DIR}/config.yaml"
-STANDARDS_FILE = f"{AGENT_DIR}/standards.md"
-IGNORE_FILE = f"{AGENT_DIR}/ignore.yaml"
-PID_FILE = f"{AGENT_DIR}/.pid"
-PAUSE_FILE = f"{AGENT_DIR}/.paused"
-PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
-SCAN_FILE = f"{AGENT_DIR}/scan.json"
-REPORTS_DIR = f"{AGENT_DIR}/reports"
-RULES_FILE = f"{AGENT_DIR}/rules.yaml"
-USAGE_DIR = f"{AGENT_DIR}/usage"
-USAGE_FILE = f"{USAGE_DIR}/usage.json"
+# Support --project-dir for central install mode
+PROJECT_DIR = os.environ.get("AGENT_PROJECT_DIR", os.getcwd())
+
+AGENT_DIR = os.path.join(PROJECT_DIR, ".agent")
+LOGS_DIR = os.path.join(AGENT_DIR, "logs")
+CONFIG_FILE = os.path.join(AGENT_DIR, "config.yaml")
+STANDARDS_FILE = os.path.join(AGENT_DIR, "standards.md")
+IGNORE_FILE = os.path.join(AGENT_DIR, "ignore.yaml")
+PID_FILE = os.path.join(AGENT_DIR, ".pid")
+PAUSE_FILE = os.path.join(AGENT_DIR, ".paused")
+PURPOSE_FILE = os.path.join(AGENT_DIR, "purpose.md")
+SCAN_FILE = os.path.join(AGENT_DIR, "scan.json")
+REPORTS_DIR = os.path.join(AGENT_DIR, "reports")
+RULES_FILE = os.path.join(AGENT_DIR, "rules.yaml")
+USAGE_DIR = os.path.join(AGENT_DIR, "usage")
+USAGE_FILE = os.path.join(USAGE_DIR, "usage.json")
 
 #GPT-4o models pricing
 PRICING = {
@@ -1165,6 +1168,7 @@ def cmd_check():
 
 def main():
     parser = argparse.ArgumentParser(description="Local Directory Monitoring Agent")
+    parser.add_argument("--project-dir", help="Target project directory (default: current directory)")
     subparsers = parser.add_subparsers(dest="command", help = "Commands")
 
     #init
@@ -1202,6 +1206,27 @@ def main():
 
     
     args = parser.parse_args()
+
+        # Override PROJECT_DIR if --project-dir is provided
+    if args.project_dir:
+        global PROJECT_DIR, AGENT_DIR, LOGS_DIR, CONFIG_FILE, STANDARDS_FILE
+        global IGNORE_FILE, PID_FILE, PAUSE_FILE, PURPOSE_FILE, SCAN_FILE
+        global REPORTS_DIR, RULES_FILE, USAGE_DIR, USAGE_FILE
+        PROJECT_DIR = os.path.abspath(args.project_dir)
+        AGENT_DIR = os.path.join(PROJECT_DIR, ".agent")
+        LOGS_DIR = os.path.join(AGENT_DIR, "logs")
+        CONFIG_FILE = os.path.join(AGENT_DIR, "config.yaml")
+        STANDARDS_FILE = os.path.join(AGENT_DIR, "standards.md")
+        IGNORE_FILE = os.path.join(AGENT_DIR, "ignore.yaml")
+        PID_FILE = os.path.join(AGENT_DIR, ".pid")
+        PAUSE_FILE = os.path.join(AGENT_DIR, ".paused")
+        PURPOSE_FILE = os.path.join(AGENT_DIR, "purpose.md")
+        SCAN_FILE = os.path.join(AGENT_DIR, "scan.json")
+        REPORTS_DIR = os.path.join(AGENT_DIR, "reports")
+        RULES_FILE = os.path.join(AGENT_DIR, "rules.yaml")
+        USAGE_DIR = os.path.join(AGENT_DIR, "usage")
+        USAGE_FILE = os.path.join(USAGE_DIR, "usage.json")
+
     
     if args.command == "init":
         cmd_init()

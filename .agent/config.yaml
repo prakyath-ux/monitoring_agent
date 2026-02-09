@@ -1,8 +1,10 @@
-log_retention_days: 30
-model: gpt-4o
 watch_extensions:
-- .py
-- .js
-- .ts
-- .java
-- .go
+  - ".py"
+  - ".js"
+  - ".ts"
+  - ".yaml"
+  - ".yml"
+  - ".json"
+  - ".md"
+model: gpt-4o
+retention_days: 30

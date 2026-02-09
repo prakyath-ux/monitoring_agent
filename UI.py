@@ -16,13 +16,15 @@ st.set_page_config(
 )
 
 # ── Constants ──
-AGENT_DIR = ".agent"
-LOGS_DIR = f"{AGENT_DIR}/logs"
-REPORTS_DIR = f"{AGENT_DIR}/reports"
-USAGE_FILE = f"{AGENT_DIR}/usage/usage.json"
-PURPOSE_FILE = f"{AGENT_DIR}/purpose.md"
-RULES_FILE = f"{AGENT_DIR}/rules.yaml"
-CONFIG_FILE = f"{AGENT_DIR}/config.yaml"
+PROJECT_DIR = os.environ.get("AGENT_PROJECT_DIR", os.getcwd())
+
+AGENT_DIR = os.path.join(PROJECT_DIR, ".agent")
+LOGS_DIR = os.path.join(AGENT_DIR, "logs")
+REPORTS_DIR = os.path.join(AGENT_DIR, "reports")
+USAGE_FILE = os.path.join(AGENT_DIR, "usage", "usage.json")
+PURPOSE_FILE = os.path.join(AGENT_DIR, "purpose.md")
+RULES_FILE = os.path.join(AGENT_DIR, "rules.yaml")
+CONFIG_FILE = os.path.join(AGENT_DIR, "config.yaml")
 
 # ── Custom CSS ──
 st.markdown("""
@@ -347,6 +349,145 @@ if "auto_start_attempted" not in st.session_state:
         )
         import time
         time.sleep(1.5)
+
+# -- First-Run setup Wizard --  #
+def is_first_run():
+    """Check if this is a fresh .agent/ that needs configuration"""
+    purpose_path = Path(PURPOSE_FILE)
+    if not purpose_path.exists():
+        return False # No .agent/ at all -nothing to configure yet
+    content = purpose_path.read_text().strip()
+    # Default purpose.md from agent.py init contains this line
+    return "Define the purpose" in content or len(content) < 20
+
+if is_first_run() and "setup_complete" not in st.session_state:
+    st.markdown("## Welcome to RepoAgent")
+    st.markdown("This project hasn't been configured yet. Let's set it up.")
+    st.markdown("---")
+
+    # Step1: Purpose
+    st.markdown("### 1. Project Purpose")
+    st.caption("Describe what this repository is for. The agent uses this to detect deviations.")
+    purpose_input = st.text_area(
+        "Purpose",
+        placeholder="e.g. This is a Python CLI tool for processing CSV files. No web frameworks, no databases.",
+        height = 150,
+        key="wizard_purpose"
+    )
+
+    st.markdown("---")
+
+    # Step 2: Rules
+    st.markdown("### 2. Coding Rules")
+    st.caption("Set boundaries for your codebase")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        max_func = st.number_input("Max function lines", min_value=10, max_value=500, value=60, key="wizard_max_func")
+        max_file = st.number_input("Max file lines", min_value=50, max_value=5000, value=800, key="wizard_max_file")
+    with col_b:
+        forbidden_imports = st.text_area(
+            "Forbidden imports (one per line)",
+            placeholder="flask\nfastapi\ndjango",
+            height=100,
+            key="wizard_imports"
+        )
+        forbidden_files = st.text_area(
+            "Forbidden files (one per line)",
+            placeholder="api.py\nserver.py\nroutes.py",
+            height=100,
+            key="wizard_files"
+        )
+
+    st.markdown("---")
+
+    # Step 3: Config
+    st.markdown("### 3. Monitoring Config")
+    watched_ext = st.text_input(
+        "Watched file extensions (comma-separated)",
+        value=".py, .js, .ts, .yaml, .yml, .json, .md",
+        key="wizard_ext"
+    )
+
+    st.markdown("---")
+
+    # Save button
+    if st.button("Complete Setup", type="primary", use_container_width=True):
+        # Write purpose.md
+        if purpose_input.strip():
+            Path(PURPOSE_FILE).write_text(purpose_input.strip())
+
+        # Write rules.yaml
+        imports_list = [i.strip() for i in forbidden_imports.strip().split("\n") if i.strip()]
+        files_list = [f.strip() for f in forbidden_files.strip().split("\n") if f.strip()]
+
+        rules_content = f"""rules:
+  max_function_lines: {max_func}
+  max_file_lines: {max_file}
+  forbidden_imports:
+"""
+        for imp in imports_list:
+            rules_content += f"    - {imp}\n"
+        if not imports_list:
+            rules_content += "    []\n"
+
+        rules_content += "  forbidden_files:\n"
+        for f in files_list:
+            rules_content += f"    - {f}\n"
+        if not files_list:
+            rules_content += "    []\n"
+
+        rules_content += """  forbidden_patterns:
+    - pattern: "password\\\\s*=\\\\s*['\\\"]"
+      message: "Hardcoded password detected"
+"""
+        Path(RULES_FILE).write_text(rules_content)
+
+        # Write config.yaml
+        ext_list = [e.strip() for e in watched_ext.split(",") if e.strip()]
+        config_content = "watch_extensions:\n"
+        for ext in ext_list:
+            config_content += f"  - \"{ext}\"\n"
+        config_content += "model: gpt-4o\nretention_days: 30\n"
+        Path(CONFIG_FILE).write_text(config_content)
+
+        st.session_state.setup_complete = True
+        st.success("Setup complete! Loading dashboard...")
+        import time
+        time.sleep(1)
+        st.rerun()
+
+    st.stop()  # Prevents the rest of the UI from rendering during wizard
+
+# ── Google Sheet Registration ──
+import socket
+import requests
+
+GSHEET_URL = "https://script.google.com/macros/s/AKfycbw9Ci8Oj0sKayDRqba9WrIYpppbKiemy0dM-0nVF9giveOFb8pUqlzeW1bMluVC2tTzIg/exec"
+
+def register_instance():
+    """Register this dashboard instance in the shared Google Sheet"""
+    if "registered" in st.session_state:
+        return
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        project_name = os.path.basename(PROJECT_DIR)
+        dev_name = os.environ.get("USER", os.environ.get("USERNAME", hostname))
+        network_url = f"http://{local_ip}:8501"
+
+        requests.post(GSHEET_URL, json={
+            "dev_name": dev_name,
+            "project_name": project_name,
+            "network_url": network_url,
+            "machine": hostname
+        }, timeout=5)
+
+        st.session_state.registered = True
+    except Exception:
+        pass  # Silent fail — don't block the dashboard
+
+register_instance()
 
 
 # ══════════════════════════════════════════════════
