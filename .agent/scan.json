@@ -1,9 +1,9 @@
 {
-  "scanned_at": "2026-02-05T12:29:16.146602",
+  "scanned_at": "2026-02-09T12:03:44.032406",
   "files": {
     "./UI.py": {
       "path": "./UI.py",
-      "lines": 828,
+      "lines": 849,
       "functions": [
         "run_agent_command",
         "is_agent_running",
@@ -26,12 +26,13 @@
         "import json",
         "from pathlib import Path",
         "from datetime import datetime",
+        "import time",
         "import time"
       ]
     },
     "./agent.py": {
       "path": "./agent.py",
-      "lines": 1106,
+      "lines": 1235,
       "functions": [
         "load_config",
         "load_ignore_patterns",
@@ -42,6 +43,8 @@
         "log_usage",
         "detect_editor_source",
         "process_running",
+        "get_current_branch",
+        "is_paused",
         "scan_file",
         "load_scan",
         "should_ignore",
@@ -52,10 +55,15 @@
         "_preload_file_contents",
         "should_process",
         "get_file_content",
+        "_refresh_cache_if_resumed",
         "on_created",
         "on_modified",
         "on_deleted",
         "on_moved",
+        "__init__",
+        "start",
+        "stop",
+        "_poll_loop",
         "__init__",
         "read_all_logs",
         "generate_report",
@@ -63,6 +71,8 @@
         "cmd_start",
         "shutdown",
         "cmd_stop",
+        "cmd_pause",
+        "cmd_resume",
         "cmd_status",
         "cmd_report",
         "cmd_logs",
@@ -74,6 +84,7 @@
       "classes": [
         "LogWriter",
         "FileEventHandler",
+        "BranchWatcher",
         "ReportEngine"
       ],
       "imports": [
@@ -82,107 +93,7 @@
         "import time",
         "import signal",
         "import argparse",
-        "from datetime import datetime",
-        "from pathlib import Path",
-        "import difflib",
-        "import yaml",
-        "import json",
-        "from dotenv import load_dotenv",
-        "from watchdog.observers import Observer",
-        "from watchdog.events import FileSystemEventHandler",
-        "import openai",
-        "import subprocess",
-        "import platform",
-        "import ast",
-        "import re"
-      ]
-    },
-    "./app.py": {
-      "path": "./app.py",
-      "lines": 109,
-      "functions": [
-        "run_agent_command"
-      ],
-      "classes": [],
-      "imports": [
-        "import streamlit as st",
-        "import subprocess",
-        "import sys",
-        "from pathlib import Path"
-      ]
-    },
-    "./version3/api.py": {
-      "path": "./version3/api.py",
-      "lines": 208,
-      "functions": [
-        "get_users",
-        "get_stats",
-        "get_user",
-        "health_check",
-        "create_user",
-        "delete_user",
-        "update_user",
-        "bulk_create_users",
-        "search_users",
-        "get_user_analytics",
-        "export_users",
-        "get_user_metrics"
-      ],
-      "classes": [],
-      "imports": [
-        "from flask import Flask, jsonify, request"
-      ]
-    },
-    "./version3/agent.py": {
-      "path": "./version3/agent.py",
-      "lines": 998,
-      "functions": [
-        "load_config",
-        "load_ignore_patterns",
-        "load_standards",
-        "load_purpose",
-        "load_rules",
-        "detect_editor_source",
-        "process_running",
-        "scan_file",
-        "load_scan",
-        "should_ignore",
-        "__init__",
-        "get_log_file",
-        "write",
-        "__init__",
-        "should_process",
-        "get_file_content",
-        "on_created",
-        "on_modified",
-        "on_deleted",
-        "on_moved",
-        "__init__",
-        "read_all_logs",
-        "generate_report",
-        "cmd_init",
-        "cmd_start",
-        "shutdown",
-        "cmd_stop",
-        "cmd_status",
-        "cmd_report",
-        "cmd_logs",
-        "cmd_scan",
-        "check_file",
-        "cmd_check",
-        "main"
-      ],
-      "classes": [
-        "LogWriter",
-        "FileEventHandler",
-        "ReportEngine"
-      ],
-      "imports": [
-        "import os",
-        "import sys",
-        "import time",
-        "import signal",
-        "import argparse",
+        "import threading",
         "from datetime import datetime",
         "from pathlib import Path",
         "import difflib",
@@ -200,9 +111,9 @@
     }
   },
   "summary": {
-    "total_files": 5,
-    "total_lines": 3249,
-    "total_functions": 94,
-    "total_classes": 6
+    "total_files": 2,
+    "total_lines": 2084,
+    "total_functions": 56,
+    "total_classes": 4
   }
 }

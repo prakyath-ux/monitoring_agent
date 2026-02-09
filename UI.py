@@ -365,7 +365,7 @@ with st.sidebar:
     else:
         st.error("○ Agent Stopped")
 
-    # Start / Stop buttons
+        # Start / Stop buttons
     col1, col2 = st.columns(2)
     with col1:
         if st.button("▶ Start", use_container_width=True, disabled=running):
@@ -383,7 +383,32 @@ with st.sidebar:
             run_agent_command("stop")
             st.rerun()
 
+    # Pause / Resume buttons (only when agent is running)
+    paused = Path(f"{AGENT_DIR}/.paused").exists()
+    if running:
+        col3, col4 = st.columns(2)
+        with col3:
+            if st.button("⏸ Pause", use_container_width=True, disabled=paused):
+                run_agent_command("pause")
+                st.rerun()
+        with col4:
+            if st.button("▶ Resume", use_container_width=True, disabled=not paused):
+                run_agent_command("resume")
+                st.rerun()
+
+    # Paused warning
+    if paused:
+        st.warning("Agent Paused — switch branch, then resume")
+
+    # Scan button
+    if st.button("🔍 Scan Codebase", use_container_width=True):
+        with st.spinner("Scanning..."):
+            scan_output = run_agent_command("scan")
+        st.success("Scan complete!")
+        st.code(scan_output, language="text")
+
     st.markdown("---")
+
 
     # Navigation
     page = st.radio(
