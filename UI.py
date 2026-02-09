@@ -455,7 +455,7 @@ if page == "Dashboard":
                 unsafe_allow_html=True
             )
     else:
-        st.info("No activity logged yet. Start the agent and make some file changes.")
+        st.info("No activity logged yet. Start the agent and make some file changes!!.")
 
     st.markdown("---")
 
