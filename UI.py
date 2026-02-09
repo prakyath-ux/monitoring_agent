@@ -365,7 +365,7 @@ with st.sidebar:
     else:
         st.error("○ Agent Stopped")
 
-        # Start / Stop buttons
+    # Start / Stop buttons
     col1, col2 = st.columns(2)
     with col1:
         if st.button("▶ Start", use_container_width=True, disabled=running):
