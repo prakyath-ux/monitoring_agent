@@ -8,8 +8,9 @@ from pathlib import Path
 from datetime import datetime
 
 # ── Page Configuration ──
+_project_name = os.path.basename(os.environ.get("AGENT_PROJECT_DIR", os.getcwd()))
 st.set_page_config(
-    page_title="RepoAgent",
+    page_title=f"RepoAgent - {_project_name}",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -361,7 +362,7 @@ def is_first_run():
     return "Define the purpose" in content or len(content) < 20
 
 if is_first_run() and "setup_complete" not in st.session_state:
-    st.markdown("## Welcome to RepoAgent")
+    st.markdown(f"## Welcome to RepoAgent - {_project_name}")
     st.markdown("This project hasn't been configured yet. Let's set it up.")
     st.markdown("---")
 
@@ -474,7 +475,7 @@ def register_instance():
         local_ip = socket.gethostbyname(hostname)
         project_name = os.path.basename(PROJECT_DIR)
         dev_name = os.environ.get("USER", os.environ.get("USERNAME", hostname))
-        network_url = f"http://{local_ip}:8501"
+        network_url = f"http://{local_ip}:8501/{project_name}"
 
         requests.post(GSHEET_URL, json={
             "dev_name": dev_name,
@@ -495,7 +496,7 @@ register_instance()
 # ══════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown("## RepoAgent")
+    st.markdown(f"## RepoAgent - {_project_name}")
     st.caption("Local Directory Code Monitor")
     st.markdown("---")
 
