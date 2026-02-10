@@ -165,11 +165,12 @@ st.markdown("""
 def run_agent_command(command):
     """Run agent.py command and return output"""
     try:
+        agent_script = str(Path(__file__).parent / "agent.py")
         result = subprocess.run(
-            [sys.executable, "agent.py", command],
+            [sys.executable, agent_script, "--project-dir", PROJECT_DIR, command],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent
+            cwd=PROJECT_DIR
         )
         output = result.stdout
         if result.stderr:
