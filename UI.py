@@ -343,9 +343,10 @@ def parse_violations(output):
 if "auto_start_attempted" not in st.session_state:
     st.session_state.auto_start_attempted = True
     if not is_agent_running() and Path(AGENT_DIR).exists():
+        agent_script = str(Path(__file__).parent / "agent.py")
         subprocess.Popen(
-            [sys.executable, "agent.py", "start"],
-            cwd=Path(__file__).parent,
+            [sys.executable, agent_script, "--project-dir", PROJECT_DIR, "start"],
+            cwd=PROJECT_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
