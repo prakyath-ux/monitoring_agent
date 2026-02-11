@@ -431,12 +431,13 @@ class FileEventHandler(FileSystemEventHandler):
             return
         self._refresh_cache_if_resumed()
 
-        if not self.should_process(event.src_path):
+        path = os.path.abspath(event.src_path)
+        if not self.should_process(path):
             return
-        
-        content = self.get_file_content(event.src_path)
-        self.file_contents[event.src_path] = content
-        self.log_writer.write("FILE_CREATED", event.src_path, content=content, branch=get_current_branch())
+
+        content = self.get_file_content(path)
+        self.file_contents[path] = content
+        self.log_writer.write("FILE_CREATED", path, content=content, branch=get_current_branch())
 
     def on_modified(self, event):
         """ Handle file modification """
@@ -447,12 +448,12 @@ class FileEventHandler(FileSystemEventHandler):
             return
         self._refresh_cache_if_resumed()
 
-        if not self.should_process(event.src_path):
+        path = os.path.abspath(event.src_path)
+        if not self.should_process(path):
             return
-        
-        new_content = self.get_file_content(event.src_path)
-        old_content = self.file_contents.get(event.src_path, "")
-        
+
+        new_content = self.get_file_content(path)
+        old_content = self.file_contents.get(path, "")
 
         # generate diff
         if old_content and new_content:
@@ -463,25 +464,24 @@ class FileEventHandler(FileSystemEventHandler):
             ))
         else:
             diff = None
-        
-                # Count lines added and detect source
+
+        # Count lines added and detect source
         lines_added = 0
         if diff:
             lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
-        source = detect_editor_source(event.src_path, lines_added)
+        source = detect_editor_source(path, lines_added)
 
-
-        self.file_contents[event.src_path] = new_content
-        self.log_writer.write("FILE_MODIFIED", event.src_path, diff=diff, source=source, branch=get_current_branch())
-        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {event.src_path} (via {source})")
+        self.file_contents[path] = new_content
+        self.log_writer.write("FILE_MODIFIED", path, diff=diff, source=source, branch=get_current_branch())
+        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {path} (via {source})")
 
         # Real-time rule checking (silent on success)
         rules_data = load_rules()
         if rules_data and "rules" in rules_data:
-            results = check_file(event.src_path, rules_data["rules"])
+            results = check_file(path, rules_data["rules"])
             violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
-                print(f"\n⚠️  VIOLATIONS in {event.src_path}:")
+                print(f"\n⚠️  VIOLATIONS in {path}:")
                 for v in violations:
                     print(f"   └── {v['type']}: {v['message']}")
 
@@ -495,11 +495,12 @@ class FileEventHandler(FileSystemEventHandler):
             return
         self._refresh_cache_if_resumed()
 
-        if not self.should_process(event.src_path):
+        path = os.path.abspath(event.src_path)
+        if not self.should_process(path):
             return
-        
-        self.file_contents.pop(event.src_path, None)
-        self.log_writer.write("FILE_DELETED", event.src_path, branch=get_current_branch())
+
+        self.file_contents.pop(path, None)
+        self.log_writer.write("FILE_DELETED", path, branch=get_current_branch())
 
     def on_moved(self, event):
         """ Handle file rename/move """
@@ -510,12 +511,13 @@ class FileEventHandler(FileSystemEventHandler):
             return
         self._refresh_cache_if_resumed()
 
-        if not self.should_process(event.dest_path):
+        dest_path = os.path.abspath(event.dest_path)
+        if not self.should_process(dest_path):
             return
 
         # Get old and new content for diff
-        old_content = self.file_contents.get(event.dest_path, "")
-        new_content = self.get_file_content(event.dest_path)
+        old_content = self.file_contents.get(dest_path, "")
+        new_content = self.get_file_content(dest_path)
 
         # Generate diff
         diff = None
@@ -533,19 +535,19 @@ class FileEventHandler(FileSystemEventHandler):
         lines_added = 0
         if diff:
             lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
-        source = detect_editor_source(event.dest_path, lines_added)
+        source = detect_editor_source(dest_path, lines_added)
 
-        self.file_contents[event.dest_path] = new_content
-        self.log_writer.write("FILE_RENAMED", event.dest_path, diff=diff, source=source, branch=get_current_branch())
-        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_RENAMED: {event.dest_path} (via {source})")
+        self.file_contents[dest_path] = new_content
+        self.log_writer.write("FILE_RENAMED", dest_path, diff=diff, source=source, branch=get_current_branch())
+        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_RENAMED: {dest_path} (via {source})")
 
         # Real-time rule checking for renamed files
         rules_data = load_rules()
         if rules_data and "rules" in rules_data:
-            results = check_file(event.dest_path, rules_data["rules"])
+            results = check_file(dest_path, rules_data["rules"])
             violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
-                print(f"\n⚠️  VIOLATIONS in {event.dest_path}:")
+                print(f"\n⚠️  VIOLATIONS in {dest_path}:")
                 for v in violations:
                     print(f"   └── {v['type']}: {v['message']}")
 
