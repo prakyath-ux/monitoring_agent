@@ -181,13 +181,21 @@ def run_agent_command(command):
 
 
 def is_agent_running():
-    """Check if agent is currently running"""
+    """Check if agent is currently running (cross-platform)"""
     pid_file = Path(f"{AGENT_DIR}/.pid")
     if pid_file.exists():
         pid = pid_file.read_text().strip()
         try:
-            os.kill(int(pid), 0)
-            return True
+            pid_int = int(pid)
+            if sys.platform == "win32":
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid_int}"],
+                    capture_output=True, text=True, timeout=3
+                )
+                return str(pid_int) in result.stdout
+            else:
+                os.kill(pid_int, 0)
+                return True
         except (ProcessLookupError, ValueError, OSError):
             return False
     return False

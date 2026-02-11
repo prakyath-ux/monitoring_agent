@@ -9,6 +9,29 @@ import time
 import signal
 import argparse
 import threading
+import platform
+
+IS_WINDOWS = platform.system() == "Windows"
+
+
+def is_pid_alive(pid):
+    """Check if a process is running (cross-platform)"""
+    if IS_WINDOWS:
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}"],
+                capture_output=True, text=True, timeout=3
+            )
+            return str(pid) in result.stdout
+        except Exception:
+            return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
 from datetime import datetime
 from pathlib import Path
 import difflib
@@ -782,12 +805,9 @@ def cmd_start():
     # Check if already running
     if Path(PID_FILE).exists():
         pid = int(Path(PID_FILE).read_text())
-        try:
-            os.kill(pid, 0)  # Check if process exists
+        if is_pid_alive(pid):
             print(f"Agent already running (PID: {pid})")
             return
-        except OSError:
-            pass  # Process not running, clean up
     
     # Check if .agent/ exists
     if not Path(AGENT_DIR).exists():
@@ -818,7 +838,8 @@ def cmd_start():
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
+    if not IS_WINDOWS:
+        signal.signal(signal.SIGTERM, shutdown)
 
     observer.start()
     branch_watcher.start()
@@ -837,12 +858,17 @@ def cmd_stop():
     if not Path(PID_FILE).exists():
         print("Agent is not running.")
         return
-    
+
     pid = int(Path(PID_FILE).read_text())
     try:
-        os.kill(pid, signal.SIGTERM)
+        if IS_WINDOWS:
+            import subprocess
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=5)
+        else:
+            os.kill(pid, signal.SIGTERM)
         print(f"Agent stopped (PID: {pid})")
-    except OSError:
+    except Exception:
         print("Agent process not found.")
 
     Path(PID_FILE).unlink(missing_ok=True)
@@ -876,12 +902,11 @@ def cmd_status():
     if not Path(PID_FILE).exists():
         print("Agent is not running.")
         return
-    
+
     pid = int(Path(PID_FILE).read_text())
-    try:
-        os.kill(pid, 0)
+    if is_pid_alive(pid):
         print(f"Agent is running (PID: {pid})")
-    except OSError:
+    else:
         print("Agent is not running (stale PID file).")
         Path(PID_FILE).unlink(missing_ok=True)
 
