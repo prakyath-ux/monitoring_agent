@@ -50,7 +50,7 @@ def fetch_registered_agents():
 def ping_host(ip, timeout=1):
     """Ping an IP address, return (alive, latency_ms)"""
     flag = "-n" if platform.system() == "Windows" else "-c"
-    timeout_flag = "-w" if platform.system() == "Windows" else "W"
+    timeout_flag = "-w" if platform.system() == "Windows" else "-W"
     try:
         result = subprocess.run(
             ["ping", flag, "1", timeout_flag, str(timeout), ip],
@@ -59,8 +59,8 @@ def ping_host(ip, timeout=1):
         if result.returncode==0:
             # Extract latency from output
             output = result.stdout
-            if "time" in output:
-                time_str = output.split("time")[-1].split()[0]
+            if "time=" in output:
+                time_str = output.split("time=")[-1].split()[0]
                 latency = float(time_str.replace("ms", ""))
                 return True, latency
             return True, 0
