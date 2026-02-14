@@ -194,8 +194,16 @@ if agents:
         # Ping
         is_online, latency = ping_host(ip) if ip else (False, 0)
 
-        # Dashboard check
-        dashboard_alive = check_dashboard(url) if url and is_online else False
+        # Dashboard check — try even if ping fails (firewall may block ping)
+        dashboard_alive = check_dashboard(url) if url else False
+
+        # Determine network status
+        if is_online:
+            net_status = "online"
+        elif dashboard_alive:
+            net_status = "firewall"  # ping blocked but dashboard reachable
+        else:
+            net_status = "offline"
 
         results.append({
             "developer": agent.get("dev_name", "Unknown"),
@@ -203,6 +211,7 @@ if agents:
             "machine": agent.get("machine", "—"),
             "ip": ip or "—",
             "online": is_online,
+            "net_status": net_status,
             "latency": latency,
             "dashboard": dashboard_alive,
             "url": url
@@ -214,7 +223,7 @@ if agents:
 
     # ── Summary Metrics ──
     total = len(results)
-    online = sum(1 for r in results if r["online"])
+    online = sum(1 for r in results if r["net_status"] in ("online", "firewall"))
     dashboards_up = sum(1 for r in results if r["dashboard"])
     offline = total - online
 
@@ -263,14 +272,16 @@ if agents:
         with col_ip:
             st.markdown(f"`{r['ip']}`")
         with col_ping:
-            if r["online"]:
+            if r["net_status"] == "online":
                 st.markdown(f'<span class="status-online">Online ({r["latency"]:.0f}ms)</span>', unsafe_allow_html=True)
+            elif r["net_status"] == "firewall":
+                st.markdown('<span class="status-unknown">Firewall Blocked</span>', unsafe_allow_html=True)
             else:
                 st.markdown('<span class="status-offline">Offline</span>', unsafe_allow_html=True)
         with col_agent:
             if r["dashboard"]:
                 st.markdown('<span class="status-online">Running</span>', unsafe_allow_html=True)
-            elif r["online"]:
+            elif r["net_status"] != "offline":
                 st.markdown('<span class="status-unknown">Stopped</span>', unsafe_allow_html=True)
             else:
                 st.markdown('<span class="status-offline">—</span>', unsafe_allow_html=True)
