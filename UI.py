@@ -474,7 +474,7 @@ if is_first_run() and "setup_complete" not in st.session_state:
 import socket
 import requests
 
-GSHEET_URL = "https://script.google.com/macros/s/AKfycbw9Ci8Oj0sKayDRqba9WrIYpppbKiemy0dM-0nVF9giveOFb8pUqlzeW1bMluVC2tTzIg/exec"
+GSHEET_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
 
 def register_instance():
     """Register this dashboard instance in the shared Google Sheet"""
@@ -482,7 +482,15 @@ def register_instance():
         return
     try:
         hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
+        # Get actual LAN IP (not 127.0.0.1)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+        except Exception:
+            local_ip = socket.gethostbyname(hostname)
+        finally:
+            s.close()
         project_name = os.path.basename(PROJECT_DIR)
         dev_name = os.environ.get("USER", os.environ.get("USERNAME", hostname))
         network_url = f"http://{local_ip}:8501/{project_name}"

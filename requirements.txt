@@ -17,3 +17,6 @@ openai
 
 #streamlit
 streamlit
+
+# HTTP requests (central dashboard)
+requests
