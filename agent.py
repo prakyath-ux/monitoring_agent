@@ -227,7 +227,7 @@ def detect_editor_source(file_path, diff_lines_added=0):
 
 def get_current_branch():
     """Get the current git branch name, or None if not a git repo"""
-    git_head = Path(".git/HEAD")
+    git_head = Path(PROJECT_DIR) / ".git" / "HEAD"
     if not git_head.exists():
         return None
     try:
@@ -382,7 +382,7 @@ class FileEventHandler(FileSystemEventHandler):
     def _preload_file_contents(self):
         """Load existing file contents so first edits have diffs"""
         extensions = self.config.get("watch_extensions", [])
-        for root, dirs, files in os.walk("."):
+        for root, dirs, files in os.walk(PROJECT_DIR):
             dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), self.ignore_pattterns)]
             for f in files:
                 fpath = os.path.join(root, f)
@@ -822,7 +822,7 @@ def cmd_start():
     
     event_handler = FileEventHandler(log_writer, config, ignore_patterns)
     observer = Observer()
-    observer.schedule(event_handler, ".", recursive=True)
+    observer.schedule(event_handler, PROJECT_DIR, recursive=True)
 
     # Start branch watcher
     branch_watcher = BranchWatcher(log_writer)
@@ -979,10 +979,10 @@ def cmd_scan():
 
     print("Scanning codebase...")
 
-    for root, dirs, files in os.walk("."):
+    for root, dirs, files in os.walk(PROJECT_DIR):
         # Skip ignored directories
         dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
-            
+
         for file in files:
             file_path = os.path.join(root, file)
 
@@ -1128,7 +1128,7 @@ def cmd_check():
     files_passed = 0
     files_failed = 0
 
-    for root, dirs, files in os.walk("."):
+    for root, dirs, files in os.walk(PROJECT_DIR):
         dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
 
         for file in files:
