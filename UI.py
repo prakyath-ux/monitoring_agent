@@ -482,15 +482,31 @@ def register_instance():
         return
     try:
         hostname = socket.gethostname()
-        # Get actual LAN IP (not 127.0.0.1)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Get actual LAN IP (not 127.0.0.1 or 127.0.1.1)
+        local_ip = None
+
+        # Method 1: UDP socket trick (works if machine has internet route)
         try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
-        except Exception:
-            local_ip = socket.gethostbyname(hostname)
-        finally:
             s.close()
+        except Exception:
+            pass
+
+        # Method 2: hostname -I on Linux (works without internet route)
+        if not local_ip or local_ip.startswith("127."):
+            try:
+                result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3)
+                ips = result.stdout.strip().split()
+                if ips:
+                    local_ip = ips[0]
+            except Exception:
+                pass
+
+        # Method 3: Last resort
+        if not local_ip or local_ip.startswith("127."):
+            local_ip = socket.gethostbyname(hostname)
         project_name = os.path.basename(PROJECT_DIR)
         dev_name = os.environ.get("USER", os.environ.get("USERNAME", hostname))
         network_url = f"http://{local_ip}:8501/{project_name}"
