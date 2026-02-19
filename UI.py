@@ -509,7 +509,8 @@ def register_instance():
             local_ip = socket.gethostbyname(hostname)
         project_name = os.path.basename(PROJECT_DIR)
         dev_name = os.environ.get("USER", os.environ.get("USERNAME", hostname))
-        network_url = f"http://{local_ip}:8501/{project_name}"
+        port = os.environ.get("AGENT_STREAMLIT_PORT", "8501")
+        network_url = f"http://{local_ip}:{port}/{project_name}"
 
         requests.post(GSHEET_URL, json={
             "dev_name": dev_name,

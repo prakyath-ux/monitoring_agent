@@ -148,9 +148,7 @@ st.subheader("Manual Fleet Configuration")
 st.caption("Add known machines manually unti; Google Sheet integration is ready")
 
 if "manual_agents" not in st.session_state:
-    st.session_state.manual_agents = [
-            {"dev_name": "infra", "project_name": "idocx-service", "network_url": "http://10.0.3.135:8502/idocx-service", "machine": "ubuntu-server"}
-    ]
+    st.session_state.manual_agents = []
 
 # Add new agent form
 with st.expander("Add Machine"):
