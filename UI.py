@@ -474,7 +474,8 @@ if is_first_run() and "setup_complete" not in st.session_state:
 import socket
 import requests
 
-GSHEET_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
+#GSHEET_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
+REGISTER_URL = "http://10.0.3.55:5000/register"
 
 def register_instance():
     """Register this dashboard instance in the shared Google Sheet"""
@@ -512,7 +513,7 @@ def register_instance():
         port = os.environ.get("AGENT_STREAMLIT_PORT", "8501")
         network_url = f"http://{local_ip}:{port}/{project_name}"
 
-        requests.post(GSHEET_URL, json={
+        requests.post(REGISTER_URL, json={
             "dev_name": dev_name,
             "project_name": project_name,
             "network_url": network_url,
