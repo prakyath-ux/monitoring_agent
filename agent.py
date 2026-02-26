@@ -409,21 +409,30 @@ class FileEventHandler(FileSystemEventHandler):
 
         return True
 
+    def _debug_log(self, msg):
+        """Write debug messages to .agent/debug.log"""
+        try:
+            debug_file = os.path.join(PROJECT_DIR, ".agent", "debug.log")
+            with open(debug_file, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+        except:
+            pass
+
     def get_file_content(self, path):
         """ Safely read file content with retry for Windows file locking """
         for attempt in range(3):
             try:
                 content = Path(path).read_text(encoding="utf-8", errors="replace")
-                print(f"    [DEBUG] read_file OK: {path} ({len(content)} chars)")
+                self._debug_log(f"read OK: {path} ({len(content)} chars)")
                 return content
             except (PermissionError, OSError) as e:
-                print(f"    [DEBUG] read_file retry {attempt+1}: {path} -> {e}")
+                self._debug_log(f"read RETRY {attempt+1}: {path} -> {e}")
                 import time
                 time.sleep(0.1)
             except Exception as e:
-                print(f"    [DEBUG] read_file FAIL: {path} -> {e}")
+                self._debug_log(f"read FAIL: {path} -> {e}")
                 return None
-        print(f"    [DEBUG] read_file GAVE UP after 3 retries: {path}")
+        self._debug_log(f"read GAVE UP after 3 retries: {path}")
         return None
         
     def _refresh_cache_if_resumed(self):
