@@ -487,9 +487,9 @@ class FileEventHandler(FileSystemEventHandler):
             results = check_file(path, rules_data["rules"])
             violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
-                print(f"\n⚠️  VIOLATIONS in {path}:")
+                print(f"\n[!] VIOLATIONS in {path}:")
                 for v in violations:
-                    print(f"   └── {v['type']}: {v['message']}")
+                    print(f"   - {v['type']}: {v['message']}")
 
 
     def on_deleted(self, event):
@@ -563,9 +563,9 @@ class FileEventHandler(FileSystemEventHandler):
             results = check_file(dest_path, rules_data["rules"])
             violations = [r for r in results if r.get("severity") == "violation"]
             if violations:
-                print(f"\n⚠️  VIOLATIONS in {dest_path}:")
+                print(f"\n[!] VIOLATIONS in {dest_path}:")
                 for v in violations:
-                    print(f"   └── {v['type']}: {v['message']}")
+                    print(f"   - {v['type']}: {v['message']}")
 
 
 
@@ -655,7 +655,7 @@ class ReportEngine:
             first_entry = logs.find("\n[")
             if first_entry > 0:
                 logs = logs[first_entry + 1:]
-            print(f"  Logs truncated: {original_len:,} → {len(logs):,} chars (keeping most recent)")
+            print(f"  Logs truncated: {original_len:,} -> {len(logs):,} chars (keeping most recent)")
         
         purpose = load_purpose()
 
@@ -1258,7 +1258,7 @@ def cmd_check():
         for file_path, violations in all_violations.items():
             print(f"[{file_path}]")
             for v in violations:
-                print(f"  ├── {v['type']}: {v['message']}")
+                print(f"  - {v['type']}: {v['message']}")
             print()
     else:
         print("No violations found.\n")
@@ -1271,7 +1271,7 @@ def cmd_check():
         for file_path, advisories in all_advisories.items():
             print(f"[{file_path}]")
             for a in advisories:
-                print(f"  ├── {a['type']}: {a['message']}")
+                print(f"  - {a['type']}: {a['message']}")
             print()
 
     print(f"Files checked: {files_checked}")

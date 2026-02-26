@@ -613,7 +613,7 @@ with st.sidebar:
         st.warning("Agent Paused — switch branch, then resume")
 
     # Scan button
-    if st.button("🔍 Scan Codebase", use_container_width=True):
+    if st.button("Scan Codebase", use_container_width=True):
         with st.spinner("Scanning..."):
             scan_output = run_agent_command("scan")
         st.success("Scan complete!")
@@ -647,7 +647,7 @@ if page == "Dashboard":
 
     if "VIOLATIONS FOUND" in check_output:
         violations = parse_violations(check_output)
-        st.warning(f"⚠️ {len(violations)} violation(s) detected")
+        st.warning(f"{len(violations)} violation(s) detected")
         with st.expander(f"View Violations ({len(violations)})"):
             for v in violations:
                 st.markdown(
