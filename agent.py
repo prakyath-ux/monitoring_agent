@@ -38,10 +38,6 @@ import difflib
 import yaml
 import json
 
-# Load .env file
-from dotenv import load_dotenv
-load_dotenv()
-
 #File watching
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -53,6 +49,11 @@ import openai
 
 # Support --project-dir for central install mode
 PROJECT_DIR = os.environ.get("AGENT_PROJECT_DIR", os.getcwd())
+
+# Load .env from project directory
+# In central-install mode, agent.py lives in ~/.agent-monitor/ but .env is in the project dir
+from dotenv import load_dotenv
+load_dotenv(os.path.join(PROJECT_DIR, '.env'))
 
 AGENT_DIR = os.path.join(PROJECT_DIR, ".agent")
 LOGS_DIR = os.path.join(AGENT_DIR, "logs")
@@ -499,6 +500,15 @@ class FileEventHandler(FileSystemEventHandler):
         if not self.should_process(path):
             return
 
+        # Atomic writes (temp→rename) trigger a ghost DELETE — file still exists on disk
+        # Skip logging if the file wasn't actually deleted
+        if os.path.exists(path):
+            return
+
+        # Keep cache for atomic writes — DELETE may fire before MOVE
+        # Preserves old content so on_moved() can produce a proper diff
+        self._pending_deletes = getattr(self, '_pending_deletes', {})
+        self._pending_deletes[path] = self.file_contents.get(path, "")
         self.file_contents.pop(path, None)
         self.log_writer.write("FILE_DELETED", path, branch=get_current_branch())
 
@@ -515,8 +525,9 @@ class FileEventHandler(FileSystemEventHandler):
         if not self.should_process(dest_path):
             return
 
-        # Get old and new content for diff
-        old_content = self.file_contents.get(dest_path, "")
+        # Get old content — check pending deletes first (atomic write pattern)
+        self._pending_deletes = getattr(self, '_pending_deletes', {})
+        old_content = self.file_contents.get(dest_path, "") or self._pending_deletes.pop(dest_path, "")
         new_content = self.get_file_content(dest_path)
 
         # Generate diff
@@ -628,6 +639,18 @@ class ReportEngine:
         if not logs.strip():
             print("No activity logs found.")
             return None
+
+        # Truncate logs if too large for the model's token limits
+        # ~4 chars per token, cap logs at ~60K tokens to leave room for prompt + response
+        max_log_chars = 240000
+        if len(logs) > max_log_chars:
+            original_len = len(logs)
+            logs = logs[-max_log_chars:]
+            # Cut to next complete log entry to avoid partial entries
+            first_entry = logs.find("\n[")
+            if first_entry > 0:
+                logs = logs[first_entry + 1:]
+            print(f"  Logs truncated: {original_len:,} → {len(logs):,} chars (keeping most recent)")
         
         purpose = load_purpose()
 
@@ -647,36 +670,102 @@ Files:
             for path, meta in scan_data['files'].items():
                 scan_context += f"- {path}: {meta['lines']} lines, {len(meta['functions'])} functions, {len(meta['classes'])} classes\n"
 
-        prompt = f"""You are a code review agent analyzing a developer's activity.
+        rules_data = load_rules()
+        rules_context = ""
+        if rules_data and "rules" in rules_data:
+            r = rules_data["rules"]
+            rules_context = f"""
+## Rules & Constraints
+- Max function lines: {r.get('max_function_lines', 'not set')}
+- Max file lines: {r.get('max_file_lines', 'not set')}
+- Forbidden imports: {', '.join(r.get('forbidden_imports', [])) or 'none'}
+- Forbidden files: {', '.join(r.get('forbidden_files', [])) or 'none'}
+"""
 
-## Repository Purpose
+        system_prompt = """You are RepoAgent — an autonomous code intelligence system that protects, evaluates, and guides software projects.
+
+You generate reports through five distinct personas. Each persona writes its own section independently, in its own voice. Do NOT repeat the same finding across multiple sections — each persona owns its domain.
+
+**Guardian**: You enforce the project's boundaries. Every change is evaluated against the purpose document. Deviations are verdicts, not suggestions. You classify changes as ALIGNED, DRIFTING, or VIOLATION. You are firm but fair.
+
+**Architect**: You assess the project's structural blueprint — its patterns, component responsibilities, and design philosophy. You detect when new code breaks established patterns, duplicates existing functionality, or adds unnecessary complexity. You speak in terms of structure and design.
+
+**Strategist**: You evaluate the project's trajectory. You assess whether effort is focused on the right areas, detect accumulating technical debt, and identify decisions that need to be made now. You think in terms of priorities and direction.
+
+**Mentor**: You are the constructive voice. You acknowledge good work first, then guide improvement. You explain WHY something matters and HOW to fix it. You reference existing code that shows the right approach. Your tone is encouraging and educational.
+
+**Investigator**: You analyze the source of changes — AI-generated vs manual. You assess whether AI contributions were reviewed and whether they helped or introduced risk. You frame this as quality assurance, never surveillance.
+
+RULES:
+- Each persona writes ONLY about its domain. No overlap.
+- Be specific — reference actual file names, function names, and code from the logs.
+- Every observation must be traceable to evidence in the logs. No generic statements.
+- You exist to protect the project's integrity and help teams build better software."""
+
+        prompt = f"""## Project Purpose (Source of Truth)
 {purpose}
 {scan_context}
-## Company Coding Standards
+{rules_context}
+## Coding Standards
 {standards}
 
-## Activity Logs (What the developer did)
+## Activity Logs
 {logs}
 
-## Your Task
-Analyze the developer's activity and generate a report with:
+---
 
-1. **Summary**: Overview of what was worked on
-2. **Activity Timeline**: Key actions in chronological order
-3. **Alignment Check**: Do the changes align with the repository purpose? Flag any deviations.
-4. **Issues Detected**: Any problems, bugs, or standards violations you notice
-5. **Recommendations**: Suggestions for improvement
+Generate a deviation report with EXACTLY 5 sections, one per persona. Use these EXACT section headers (they are used for parsing):
 
-Be specific, reference actual file names and code from the logs.
-Format the report in clean markdown.
-"""
+## GUARDIAN REPORT
+Evaluate every significant change against the purpose document.
+- For each change, give a verdict: **ALIGNED** / **DRIFTING** / **VIOLATION**
+- If DRIFTING or VIOLATION, specify which boundary or principle is at risk
+- Overall project health: On Track / Drifting / At Risk
+- Start with a 2-3 sentence executive summary of purpose alignment
+
+## ARCHITECT REPORT
+Assess the structural health of the codebase.
+- Are new changes consistent with existing patterns?
+- Is any functionality being duplicated?
+- Is complexity growing beyond what the task requires?
+- Architecture health: Stable / Degrading / Improving
+- Reference specific files, functions, and patterns
+
+## STRATEGIST REPORT
+Evaluate the project's trajectory and priorities.
+- Where is the team's effort concentrated? Is it the right area?
+- What technical debt is accumulating?
+- Are priorities aligned with the roadmap?
+- Top 3 priorities for the next development session
+- Decisions that need to be made now to prevent future problems
+
+## MENTOR REPORT
+Provide constructive guidance for each issue found.
+- What was done well (acknowledge good work first)
+- For each issue: what it is, why it matters, how to fix it
+- Point to existing code that shows the right approach
+- Teach the principle behind the fix, not just the fix itself
+- Keep the tone encouraging and constructive
+
+## SOURCE ANALYSIS
+Analyze the source and quality of changes.
+- Breakdown of AI-generated vs manual changes (with file names)
+- Any AI-generated code that appears unreviewed (bulk changes with no follow-up edits)
+- Quality assessment: are AI contributions helping or introducing risk?
+- Frame as quality assurance, not surveillance
+
+Be specific. Reference actual file names, function names, and code from the logs. Do not make generic observations — every point should be traceable to evidence in the logs.
+Format in clean markdown."""
 
         print("Generate report with openai API...")
 
         response = self.client.chat.completions.create(
             model=self.config.get("model", "gpt-4o"),
             max_tokens=4096,
-            messages = [{'role': 'user', 'content': prompt}]
+            messages = [
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': prompt}
+            ]
         )
 
         # Log usage
@@ -920,10 +1009,8 @@ def cmd_report(from_date=None, to_date=None):
     report = engine.generate_report(from_date, to_date)
     
     if report:
-        #Print to console
-        print("\n" + "="*80)
+        #Print report (clean, no separators — stdout is captured by UI)
         print(report)
-        print("="*80 + "\n")
 
         #save to file
         Path(REPORTS_DIR).mkdir(exist_ok=True)

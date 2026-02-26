@@ -162,12 +162,12 @@ st.markdown("""
 #  HELPER FUNCTIONS
 # ══════════════════════════════════════════════════
 
-def run_agent_command(command):
+def run_agent_command(command, *extra_args):
     """Run agent.py command and return output"""
     try:
         agent_script = str(Path(__file__).parent / "agent.py")
         result = subprocess.run(
-            [sys.executable, agent_script, "--project-dir", PROJECT_DIR, command],
+            [sys.executable, agent_script, "--project-dir", PROJECT_DIR, command, *extra_args],
             capture_output=True,
             text=True,
             cwd=PROJECT_DIR
@@ -178,6 +178,39 @@ def run_agent_command(command):
         return output.strip() if output else "Command completed."
     except Exception as e:
         return f"Error: {str(e)}"
+
+
+def display_tabbed_report(report_text):
+    """Parse report into 5 persona sections and display in Streamlit tabs"""
+    persona_headers = [
+        ("GUARDIAN REPORT", "Guardian"),
+        ("ARCHITECT REPORT", "Architect"),
+        ("STRATEGIST REPORT", "Strategist"),
+        ("MENTOR REPORT", "Mentor"),
+        ("SOURCE ANALYSIS", "Source Analysis"),
+    ]
+    sections = {}
+    for i, (header, name) in enumerate(persona_headers):
+        pattern = rf"##\s*{header}"
+        match = re.search(pattern, report_text, re.IGNORECASE)
+        if match:
+            start = match.end()
+            next_start = len(report_text)
+            for j in range(i + 1, len(persona_headers)):
+                next_pattern = rf"##\s*{persona_headers[j][0]}"
+                next_match = re.search(next_pattern, report_text, re.IGNORECASE)
+                if next_match:
+                    next_start = next_match.start()
+                    break
+            sections[name] = report_text[start:next_start].strip()
+
+    if sections:
+        tabs = st.tabs(list(sections.keys()))
+        for tab, (name, content) in zip(tabs, sections.items()):
+            with tab:
+                st.markdown(content)
+    else:
+        st.markdown(report_text)
 
 
 def is_agent_running():
@@ -897,13 +930,14 @@ elif page == "Reports":
         generate = st.button("Generate New Report", use_container_width=True)
 
     if generate:
+        today = datetime.now().strftime("%Y-%m-%d")
         with st.spinner("Generating report via OpenAI... This may take a moment."):
-            output = run_agent_command("report")
+            output = run_agent_command("report", "--from", today)
             st.session_state.report_output = output
 
     if "report_output" in st.session_state:
         st.success("Report generated!")
-        st.markdown(st.session_state.report_output)
+        display_tabbed_report(st.session_state.report_output)
 
     st.markdown("---")
     st.subheader("Past Reports")
@@ -927,7 +961,7 @@ elif page == "Reports":
                 report_path = reports_path / st.session_state.viewing_report
                 if report_path.exists():
                     st.subheader(f"{st.session_state.viewing_report}")
-                    st.markdown(report_path.read_text())
+                    display_tabbed_report(report_path.read_text())
         else:
             st.info("No reports generated yet.")
     else:
