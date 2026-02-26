@@ -444,36 +444,44 @@ class FileEventHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         """ Handle file creation """
+        self._debug_log(f"EVENT on_created: {event.src_path} (is_dir={event.is_directory})")
         if event.is_directory:
             return
         if is_paused():
             self._was_paused = True
+            self._debug_log("  SKIPPED: paused")
             return
         self._refresh_cache_if_resumed()
 
         path = os.path.abspath(event.src_path)
         if not self.should_process(path):
+            self._debug_log(f"  SKIPPED: should_process=False for {path}")
             return
 
         content = self.get_file_content(path)
         self.file_contents[path] = content
+        self._debug_log(f"  LOGGED: FILE_CREATED {path} (content={'None' if content is None else str(len(content))+' chars'})")
         self.log_writer.write("FILE_CREATED", path, content=content, branch=get_current_branch())
 
     def on_modified(self, event):
         """ Handle file modification """
+        self._debug_log(f"EVENT on_modified: {event.src_path} (is_dir={event.is_directory})")
         if event.is_directory:
             return
         if is_paused():
             self._was_paused = True
+            self._debug_log("  SKIPPED: paused")
             return
         self._refresh_cache_if_resumed()
 
         path = os.path.abspath(event.src_path)
         if not self.should_process(path):
+            self._debug_log(f"  SKIPPED: should_process=False for {path}")
             return
 
         new_content = self.get_file_content(path)
         old_content = self.file_contents.get(path, "")
+        self._debug_log(f"  old_content={'None' if old_content is None else str(len(old_content))+' chars'}, new_content={'None' if new_content is None else str(len(new_content))+' chars'}")
 
         # generate diff
         if old_content and new_content:
@@ -482,8 +490,10 @@ class FileEventHandler(FileSystemEventHandler):
                 new_content.splitlines(),
                 lineterm=""
             ))
+            self._debug_log(f"  diff={'empty' if not diff else str(len(diff))+' chars'}")
         else:
             diff = None
+            self._debug_log(f"  diff=None (old or new content missing)")
 
         # Count lines added and detect source
         lines_added = 0
@@ -493,6 +503,7 @@ class FileEventHandler(FileSystemEventHandler):
 
         self.file_contents[path] = new_content
         self.log_writer.write("FILE_MODIFIED", path, diff=diff, source=source, branch=get_current_branch())
+        self._debug_log(f"  LOGGED: FILE_MODIFIED {path} (source={source}, diff={'yes' if diff else 'no'})")
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {path} (via {source})")
 
         # Real-time rule checking (silent on success)
@@ -508,20 +519,24 @@ class FileEventHandler(FileSystemEventHandler):
 
     def on_deleted(self, event):
         """ handle file deletion """
+        self._debug_log(f"EVENT on_deleted: {event.src_path} (is_dir={event.is_directory})")
         if event.is_directory:
             return
         if is_paused():
             self._was_paused = True
+            self._debug_log("  SKIPPED: paused")
             return
         self._refresh_cache_if_resumed()
 
         path = os.path.abspath(event.src_path)
         if not self.should_process(path):
+            self._debug_log(f"  SKIPPED: should_process=False for {path}")
             return
 
         # Atomic writes (temp→rename) trigger a ghost DELETE — file still exists on disk
         # Skip logging if the file wasn't actually deleted
         if os.path.exists(path):
+            self._debug_log(f"  SKIPPED: ghost delete (file still exists) {path}")
             return
 
         # Keep cache for atomic writes — DELETE may fire before MOVE
@@ -529,24 +544,29 @@ class FileEventHandler(FileSystemEventHandler):
         self._pending_deletes = getattr(self, '_pending_deletes', {})
         self._pending_deletes[path] = self.file_contents.get(path, "")
         self.file_contents.pop(path, None)
+        self._debug_log(f"  LOGGED: FILE_DELETED {path} (cached in pending_deletes)")
         self.log_writer.write("FILE_DELETED", path, branch=get_current_branch())
 
     def on_moved(self, event):
         """ Handle file rename/move """
+        self._debug_log(f"EVENT on_moved: {event.src_path} -> {event.dest_path} (is_dir={event.is_directory})")
         if event.is_directory:
             return
         if is_paused():
             self._was_paused = True
+            self._debug_log("  SKIPPED: paused")
             return
         self._refresh_cache_if_resumed()
 
         dest_path = os.path.abspath(event.dest_path)
         if not self.should_process(dest_path):
+            self._debug_log(f"  SKIPPED: should_process=False for {dest_path}")
             return
 
         # Get old content — check pending deletes first (atomic write pattern)
         self._pending_deletes = getattr(self, '_pending_deletes', {})
         old_content = self.file_contents.get(dest_path, "") or self._pending_deletes.pop(dest_path, "")
+        self._debug_log(f"  old_content={'None' if old_content is None else str(len(old_content))+' chars'}")
         new_content = self.get_file_content(dest_path)
 
         # Generate diff
