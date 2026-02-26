@@ -410,11 +410,16 @@ class FileEventHandler(FileSystemEventHandler):
         return True
 
     def get_file_content(self, path):
-        """ Safely read file content """
-        try:
-            return Path(path).read_text()
-        except:
-            return None 
+        """ Safely read file content with retry for Windows file locking """
+        for attempt in range(3):
+            try:
+                return Path(path).read_text(encoding="utf-8", errors="replace")
+            except (PermissionError, OSError):
+                import time
+                time.sleep(0.1)
+            except Exception:
+                return None
+        return None
         
     def _refresh_cache_if_resumed(self):
         """After resume from pause, refresh cache to avoid stale diffs from branch switches"""
