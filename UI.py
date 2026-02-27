@@ -208,9 +208,13 @@ def display_tabbed_report(report_text):
         tabs = st.tabs(list(sections.keys()))
         for tab, (name, content) in zip(tabs, sections.items()):
             with tab:
-                st.markdown(content)
+                _, col, _ = st.columns([1, 3, 1])
+                with col:
+                    st.markdown(content)
     else:
-        st.markdown(report_text)
+        _, col, _ = st.columns([1, 3, 1])
+        with col:
+            st.markdown(report_text)
 
 
 def is_agent_running():
