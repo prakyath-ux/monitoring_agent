@@ -215,7 +215,7 @@ def display_tabbed_report(report_text):
         with content_col:
             st.subheader(selected)
             st.markdown("---")
-            st.markdown(sections[selected])
+            st.markdown(f'<div style="font-size: 1.15rem; line-height: 1.8;">{sections[selected]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(report_text)
 
@@ -954,10 +954,12 @@ elif page == "Reports":
         report_files = sorted(reports_path.glob("*.md"), reverse=True)
 
         if report_files:
-            for report_file in report_files:
+            for idx, report_file in enumerate(report_files):
+                # Parse date from filename: report_YYYY-MM-DD_HH-MM-SS.md
+                display_name = report_file.stem.replace("report_", "").replace("-", "/", 2).replace("_", " ").replace("/", "-", 2)
                 col_name, col_view = st.columns([3, 1])
                 with col_name:
-                    st.caption(f"{report_file.name}")
+                    st.caption(f"Report - {display_name}")
                 with col_view:
                     if st.button("View", key=report_file.name, use_container_width=True):
                         st.session_state.viewing_report = report_file.name
@@ -967,8 +969,8 @@ elif page == "Reports":
                 st.markdown("---")
                 report_path = reports_path / st.session_state.viewing_report
                 if report_path.exists():
-                    st.subheader(f"{st.session_state.viewing_report}")
-                    display_tabbed_report(report_path.read_text())
+                    st.subheader("Report")
+                    display_tabbed_report(report_path.read_text(encoding="utf-8"))
         else:
             st.info("No reports generated yet.")
     else:
