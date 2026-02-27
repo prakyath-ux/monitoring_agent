@@ -205,16 +205,19 @@ def display_tabbed_report(report_text):
             sections[name] = report_text[start:next_start].strip()
 
     if sections:
-        tabs = st.tabs(list(sections.keys()))
-        for tab, (name, content) in zip(tabs, sections.items()):
-            with tab:
-                _, col, _ = st.columns([1, 3, 1])
-                with col:
-                    st.markdown(content)
+        nav_col, content_col = st.columns([1, 4])
+        with nav_col:
+            selected = st.radio(
+                "Report Section",
+                list(sections.keys()),
+                label_visibility="collapsed"
+            )
+        with content_col:
+            st.subheader(selected)
+            st.markdown("---")
+            st.markdown(sections[selected])
     else:
-        _, col, _ = st.columns([1, 3, 1])
-        with col:
-            st.markdown(report_text)
+        st.markdown(report_text)
 
 
 def is_agent_running():
