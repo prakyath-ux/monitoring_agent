@@ -79,7 +79,7 @@ def load_config():
     """ Load agent configuration form .agents/config.yaml """
 
     if Path(CONFIG_FILE).exists():
-        with open(CONFIG_FILE) as f:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
             return yaml.safe_load(f)
     return {
         "watch_extensions": [".py", ".js", ".ts", ".java", ".go"],
@@ -92,7 +92,7 @@ def load_ignore_patterns():
     """ Load patterns to ignore from .agent/ignore.yaml """
 
     if Path(IGNORE_FILE).exists():
-        with open(IGNORE_FILE) as f:
+        with open(IGNORE_FILE, encoding="utf-8") as f:
             return yaml.safe_load(f) or []
         
     return [
@@ -109,27 +109,27 @@ def load_standards():
     """ Load company code standards from .agent/standards.md """
 
     if Path(STANDARDS_FILE).exists():
-        return Path(STANDARDS_FILE).read_text()
+        return Path(STANDARDS_FILE).read_text(encoding="utf-8", errors="replace")
     return "No company standards defined"
 
 def load_purpose():
     """ Load repository purpose from .agent/purpose.md """
 
     if Path(PURPOSE_FILE).exists():
-        return Path(PURPOSE_FILE).read_text()
+        return Path(PURPOSE_FILE).read_text(encoding="utf-8", errors="replace")
     return "No repository purpose defined"
 
 def load_rules():
     """ Load rules from .agent/rules.yaml """
     if Path(RULES_FILE).exists():
-        with open(RULES_FILE) as f:
+        with open(RULES_FILE, encoding="utf-8") as f:
             return yaml.safe_load(f)
     return None
 
 def load_usage():
     """Load usage data from .agent/usage/usage.json"""
     if Path(USAGE_FILE).exists():
-        with open(USAGE_FILE) as f:
+        with open(USAGE_FILE, encoding="utf-8") as f:
             return json.load(f)
     return {
         "total_input_tokens": 0,
@@ -165,7 +165,7 @@ def log_usage(model, input_tokens, output_tokens,  purpose="report"):
     })
 
     #save
-    with open(USAGE_FILE, "w") as f:
+    with open(USAGE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
     return total_cost
@@ -232,7 +232,7 @@ def get_current_branch():
     if not git_head.exists():
         return None
     try:
-        content = git_head.read_text().strip()
+        content = git_head.read_text(encoding="utf-8", errors="replace").strip()
         if content.startswith("ref: refs/heads/"):
             return content[len("ref: refs/heads/"):]
         return content[:8]
@@ -248,7 +248,7 @@ def is_paused():
 def scan_file(file_path):
     """ Extract metadata from a single file """
     try:
-        content = Path(file_path).read_text()
+        content = Path(file_path).read_text(encoding="utf-8", errors="replace")
         lines = content.splitlines()
 
         metadata = {
@@ -280,7 +280,7 @@ def scan_file(file_path):
 def load_scan():
     """ Load scan data from .agent/scan.json """
     if Path(SCAN_FILE).exists():
-        with open(SCAN_FILE) as f:
+        with open(SCAN_FILE, encoding="utf-8") as f:
             return json.load(f)
     return None
 
@@ -360,7 +360,7 @@ class LogWriter:
 
         entry += f"{'='*80}\n"
 
-        with open(log_file, "a") as f:
+        with open(log_file, "a", encoding="utf-8") as f:
             f.write(entry)
 
 
@@ -632,7 +632,7 @@ class ReportEngine:
                 continue
 
             all_logs.append(f"\n--- {log_file.name} ---\n")
-            all_logs.append(log_file.read_text())
+            all_logs.append(log_file.read_text(encoding="utf-8", errors="replace"))
 
         return "\n".join(all_logs)
 
@@ -802,7 +802,7 @@ def cmd_init():
             "model": "gpt-4o",
             "log_retention_days": 30
         }
-        with open(CONFIG_FILE, "w") as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_config, f, default_flow_style=False)
     
     # Create default standards.md
@@ -824,7 +824,7 @@ def cmd_init():
 - Sanitize all user input
 - Use parameterized queries for databases
 """
-        Path(STANDARDS_FILE).write_text(default_standards)
+        Path(STANDARDS_FILE).write_text(default_standards, encoding="utf-8")
     
     # Create default ignore.yaml
     if not Path(IGNORE_FILE).exists():
@@ -837,7 +837,7 @@ def cmd_init():
             ".env",
             "*.log"
         ]
-        with open(IGNORE_FILE, "w") as f:
+        with open(IGNORE_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_ignore, f, default_flow_style=False)
 
     # Create default purpose.md
@@ -853,7 +853,7 @@ def cmd_init():
 ## Deviation Signals
 [What changes would indicate scope creep or wrong direction?]
 """
-        Path(PURPOSE_FILE).write_text(default_purpose)
+        Path(PURPOSE_FILE).write_text(default_purpose, encoding="utf-8")
     
     print(f"Initialized agent in {os.getcwd()}")
     print(f"  Created: {AGENT_DIR}/")
@@ -892,7 +892,7 @@ def cmd_init():
                 ]
             }
         }
-        with open(RULES_FILE, "w") as f:
+        with open(RULES_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_rules, f, default_flow_style=False, sort_keys=False)
 
 
@@ -900,7 +900,7 @@ def cmd_start():
     """Start the file watcher in background"""
     # Check if already running
     if Path(PID_FILE).exists():
-        pid = int(Path(PID_FILE).read_text())
+        pid = int(Path(PID_FILE).read_text(encoding="utf-8", errors="replace"))
         if is_pid_alive(pid):
             print(f"Agent already running (PID: {pid})")
             return
@@ -922,7 +922,7 @@ def cmd_start():
     branch_watcher = BranchWatcher(log_writer)
 
     # Save PID
-    Path(PID_FILE).write_text(str(os.getpid()))
+    Path(PID_FILE).write_text(str(os.getpid()), encoding="utf-8")
 
     # Handle shutdown
     def shutdown(signum, frame):
@@ -955,7 +955,7 @@ def cmd_stop():
         print("Agent is not running.")
         return
 
-    pid = int(Path(PID_FILE).read_text())
+    pid = int(Path(PID_FILE).read_text(encoding="utf-8", errors="replace"))
     try:
         if IS_WINDOWS:
             import subprocess
@@ -979,7 +979,7 @@ def cmd_pause():
     if Path(PAUSE_FILE).exists():
         print("Agent is already paused.")
         return
-    Path(PAUSE_FILE).write_text(datetime.now().isoformat())
+    Path(PAUSE_FILE).write_text(datetime.now().isoformat(), encoding="utf-8")
     print("Agent paused. File events will be ignored.")
     print("Run 'python agent.py resume' to resume logging.")
 
@@ -999,7 +999,7 @@ def cmd_status():
         print("Agent is not running.")
         return
 
-    pid = int(Path(PID_FILE).read_text())
+    pid = int(Path(PID_FILE).read_text(encoding="utf-8", errors="replace"))
     if is_pid_alive(pid):
         print(f"Agent is running (PID: {pid})")
     else:
@@ -1021,7 +1021,7 @@ def cmd_report(from_date=None, to_date=None):
         Path(REPORTS_DIR).mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         report_file = Path(REPORTS_DIR) / f"report_{timestamp}.md"
-        report_file.write_text(report)
+        report_file.write_text(report, encoding="utf-8")
         print(f"Report savd to: {report_file}")
 
 
@@ -1035,7 +1035,7 @@ def cmd_logs(date=None):
     if date:
         log_file = logs_path / f"{date}.log"
         if log_file.exists():
-            print(log_file.read_text())
+            print(log_file.read_text(encoding="utf-8", errors="replace"))
         else:
             print(f"No logs for {date}")
     else:
@@ -1043,7 +1043,7 @@ def cmd_logs(date=None):
         log_files = sorted(logs_path.glob("*.log"), reverse=True)
         if log_files:
             print(f"--- {log_files[0].name} ---")
-            print(log_files[0].read_text())
+            print(log_files[0].read_text(encoding="utf-8", errors="replace"))
         else:
             print("No logs found.")
 
@@ -1097,7 +1097,7 @@ def cmd_scan():
                 print(f"  Scanned: {file_path} ")
 
         # save scan data
-    with open(SCAN_FILE, "w") as f:
+    with open(SCAN_FILE, "w", encoding="utf-8") as f:
         json.dump(scan_data, f, indent=2)
 
     print(f"\n Scan Complete! ")
@@ -1127,7 +1127,7 @@ def check_file(file_path, rules):
 
     # Read file content
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding="utf-8") as f:
             content = f.read()
             lines = content.split('\n')
     except Exception as e:

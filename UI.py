@@ -224,7 +224,7 @@ def is_agent_running():
     """Check if agent is currently running (cross-platform)"""
     pid_file = Path(f"{AGENT_DIR}/.pid")
     if pid_file.exists():
-        pid = pid_file.read_text(encoding="utf-8", errors="replace").strip()
+        pid = pid_file.read_text().strip()
         try:
             pid_int = int(pid)
             if sys.platform == "win32":
@@ -300,7 +300,7 @@ def get_all_log_entries():
 
     all_entries = []
     for log_file in sorted(logs_path.glob("*.log"), reverse=True):
-        text = log_file.read_text(encoding="utf-8", errors="replace")
+        text = log_file.read_text()
         entries = parse_log_entries(text)
         all_entries.extend(entries)
 
@@ -319,7 +319,7 @@ def load_purpose():
     """Load purpose.md content"""
     path = Path(PURPOSE_FILE)
     if path.exists():
-        return path.read_text(encoding="utf-8", errors="replace")
+        return path.read_text()
     return "No purpose.md found. Run `python agent.py init` first."
 
 
@@ -327,7 +327,7 @@ def load_usage():
     """Load usage data"""
     path = Path(USAGE_FILE)
     if path.exists():
-        with open(path, encoding="utf-8") as f:
+        with open(path) as f:
             return json.load(f)
     return {"total_input_tokens": 0, "total_output_tokens": 0, "total_cost_usd": 0.0, "requests": []}
 
@@ -407,7 +407,7 @@ def is_first_run():
     purpose_path = Path(PURPOSE_FILE)
     if not purpose_path.exists():
         return False # No .agent/ at all -nothing to configure yet
-    content = purpose_path.read_text(encoding="utf-8", errors="replace").strip()
+    content = purpose_path.read_text().strip()
     # Default purpose.md from agent.py init contains this line
     return "Define the purpose" in content or len(content) < 20
 
@@ -466,7 +466,7 @@ if is_first_run() and "setup_complete" not in st.session_state:
     if st.button("Complete Setup", type="primary", use_container_width=True):
         # Write purpose.md
         if purpose_input.strip():
-            Path(PURPOSE_FILE).write_text(encoding="utf-8", data=purpose_input.strip())
+            Path(PURPOSE_FILE).write_text(purpose_input.strip())
 
         # Write rules.yaml
         imports_list = [i.strip() for i in forbidden_imports.strip().split("\n") if i.strip()]
@@ -492,7 +492,7 @@ if is_first_run() and "setup_complete" not in st.session_state:
     - pattern: "password\\\\s*=\\\\s*['\\\"]"
       message: "Hardcoded password detected"
 """
-        Path(RULES_FILE).write_text(encoding="utf-8", data=rules_content)
+        Path(RULES_FILE).write_text(rules_content)
 
         # Write config.yaml
         ext_list = [e.strip() for e in watched_ext.split(",") if e.strip()]
@@ -500,7 +500,7 @@ if is_first_run() and "setup_complete" not in st.session_state:
         for ext in ext_list:
             config_content += f"  - \"{ext}\"\n"
         config_content += "model: gpt-4o\nretention_days: 30\n"
-        Path(CONFIG_FILE).write_text(encoding="utf-8", data=config_content)
+        Path(CONFIG_FILE).write_text(config_content)
 
         st.session_state.setup_complete = True
         st.success("Setup complete! Loading dashboard...")
@@ -740,7 +740,7 @@ elif page == "Activity Logs":
             if not log_file.exists():
                 continue
 
-            entries = parse_log_entries(log_file.read_text(encoding="utf-8", errors="replace"))
+            entries = parse_log_entries(log_file.read_text())
 
             # Filter out .pid entries
             entries = [e for e in entries if ".pid" not in e.get("path", "")]
@@ -954,12 +954,10 @@ elif page == "Reports":
         report_files = sorted(reports_path.glob("*.md"), reverse=True)
 
         if report_files:
-            for idx, report_file in enumerate(report_files):
-                # Parse date from filename: report_YYYY-MM-DD_HH-MM-SS.md
-                display_name = report_file.stem.replace("report_", "").replace("-", "/", 2).replace("_", " ").replace("/", "-", 2)
+            for report_file in report_files:
                 col_name, col_view = st.columns([3, 1])
                 with col_name:
-                    st.caption(f"Report - {display_name}")
+                    st.caption(f"{report_file.name}")
                 with col_view:
                     if st.button("View", key=report_file.name, use_container_width=True):
                         st.session_state.viewing_report = report_file.name
@@ -969,8 +967,8 @@ elif page == "Reports":
                 st.markdown("---")
                 report_path = reports_path / st.session_state.viewing_report
                 if report_path.exists():
-                    st.subheader("Report")
-                    display_tabbed_report(report_path.read_text(encoding="utf-8"))
+                    st.subheader(f"{st.session_state.viewing_report}")
+                    display_tabbed_report(report_path.read_text())
         else:
             st.info("No reports generated yet.")
     else:
@@ -992,11 +990,11 @@ elif page == "Settings":
         config_path = Path(CONFIG_FILE)
         if config_path.exists():
             if st.session_state.get("edit_config"):
-                config_content = st.text_area("config.yaml", config_path.read_text(encoding="utf-8", errors="replace"), height=300, key="config_editor")
+                config_content = st.text_area("config.yaml", config_path.read_text(), height=300, key="config_editor")
                 col_save, col_cancel, _ = st.columns([1, 1, 4])
                 with col_save:
                     if st.button("Save", key="save_config", use_container_width=True):
-                        config_path.write_text(encoding="utf-8", data=config_content)
+                        config_path.write_text(config_content)
                         st.session_state.edit_config = False
                         st.success("Config saved")
                         st.rerun()
@@ -1005,7 +1003,7 @@ elif page == "Settings":
                         st.session_state.edit_config = False
                         st.rerun()
             else:
-                st.code(config_path.read_text(encoding="utf-8", errors="replace"), language="yaml")
+                st.code(config_path.read_text(), language="yaml")
                 if st.button("Edit", key="edit_config_btn"):
                     st.session_state.edit_config = True
                     st.rerun()
@@ -1017,11 +1015,11 @@ elif page == "Settings":
         rules_path = Path(RULES_FILE)
         if rules_path.exists():
             if st.session_state.get("edit_rules"):
-                rules_content = st.text_area("rules.yaml", rules_path.read_text(encoding="utf-8", errors="replace"), height=400, key="rules_editor")
+                rules_content = st.text_area("rules.yaml", rules_path.read_text(), height=400, key="rules_editor")
                 col_save, col_cancel, _ = st.columns([1, 1, 4])
                 with col_save:
                     if st.button("Save", key="save_rules", use_container_width=True):
-                        rules_path.write_text(encoding="utf-8", data=rules_content)
+                        rules_path.write_text(rules_content)
                         st.session_state.edit_rules = False
                         st.success("Rules saved")
                         st.rerun()
@@ -1030,7 +1028,7 @@ elif page == "Settings":
                         st.session_state.edit_rules = False
                         st.rerun()
             else:
-                st.code(rules_path.read_text(encoding="utf-8", errors="replace"), language="yaml")
+                st.code(rules_path.read_text(), language="yaml")
                 if st.button("Edit", key="edit_rules_btn"):
                     st.session_state.edit_rules = True
                     st.rerun()
@@ -1042,11 +1040,11 @@ elif page == "Settings":
         purpose_path = Path(PURPOSE_FILE)
         if purpose_path.exists():
             if st.session_state.get("edit_purpose"):
-                purpose_content = st.text_area("purpose.md", purpose_path.read_text(encoding="utf-8", errors="replace"), height=400, key="purpose_editor")
+                purpose_content = st.text_area("purpose.md", purpose_path.read_text(), height=400, key="purpose_editor")
                 col_save, col_cancel, _ = st.columns([1, 1, 4])
                 with col_save:
                     if st.button("Save", key="save_purpose", use_container_width=True):
-                        purpose_path.write_text(encoding="utf-8", data=purpose_content)
+                        purpose_path.write_text(purpose_content)
                         st.session_state.edit_purpose = False
                         st.success("Purpose saved")
                         st.rerun()
