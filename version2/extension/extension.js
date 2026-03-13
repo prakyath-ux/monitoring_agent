@@ -168,19 +168,27 @@ async function launchStreamlit(cwd) {
         }
     });
 
-    // Wait for Streamlit + agent to start, then check real status
+    // Explicitly start the agent (don't rely on UI.py auto-start timing)
     setTimeout(() => {
         if (!streamlitProcess || streamlitProcess.killed) return;
 
         const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
-        execFile(pythonPath, [path.join(AGENT_HOME, 'agent.py'), '--project-dir', cwd, 'status'], { cwd }, (err, stdout) => {
-            const isRunning = stdout && stdout.includes('running');
-            updateStatusBar(isRunning ? 'running' : 'stopped');
-            vscode.window.showInformationMessage(
-                `Agent Monitor: http://localhost:${port}/${projectName} - Agent ${isRunning ? 'Running' : 'Stopped'}`
-            );
+        const agentPy = path.join(AGENT_HOME, 'agent.py');
+
+        // Start the agent
+        execFile(pythonPath, [agentPy, '--project-dir', cwd, 'start'], { cwd, env: MIN_ENV }, () => {
+            // After start completes, check real status
+            setTimeout(() => {
+                execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd }, (err, stdout) => {
+                    const isRunning = stdout && stdout.includes('running');
+                    updateStatusBar(isRunning ? 'running' : 'stopped');
+                    vscode.window.showInformationMessage(
+                        `Agent Monitor: http://localhost:${port}/${projectName} - Agent ${isRunning ? 'Running' : 'Stopped'}`
+                    );
+                });
+            }, 2000);
         });
-    }, 5000);
+    }, 3000);
 }
 
 // ---- Commands ----
