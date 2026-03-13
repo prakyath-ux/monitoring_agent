@@ -140,25 +140,35 @@ async function launchStreamlit(cwd) {
         }
     });
 
-    // Explicitly start the agent, then check real status
+    // Start the agent (fire and forget — don't wait for callback)
     setTimeout(() => {
         if (!streamlitProcess || streamlitProcess.killed) return;
 
         const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
         const agentPy = path.join(AGENT_HOME, 'agent.py');
 
-        execFile(pythonPath, [agentPy, '--project-dir', cwd, 'start'], { cwd, env: MIN_ENV }, () => {
-            setTimeout(() => {
-                execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd }, (err, stdout) => {
-                    const isRunning = stdout && stdout.includes('running');
-                    updateStatusBar(isRunning ? 'running' : 'stopped');
-                    vscode.window.showInformationMessage(
-                        `Agent Monitor: http://localhost:${port}/${projectName} - Agent ${isRunning ? 'Running' : 'Stopped'}`
-                    );
-                });
-            }, 2000);
+        // Fire and forget — agent.py start may not return on Windows
+        const startProc = spawn(pythonPath, [agentPy, '--project-dir', cwd, 'start'], {
+            cwd, env: MIN_ENV, detached: true, stdio: 'ignore'
         });
-    }, 3000);
+        startProc.unref();
+    }, 2000);
+
+    // Check real status after giving agent time to start
+    setTimeout(() => {
+        if (!streamlitProcess || streamlitProcess.killed) return;
+
+        const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
+        const agentPy = path.join(AGENT_HOME, 'agent.py');
+
+        execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd, timeout: 10000 }, (err, stdout) => {
+            const isRunning = stdout && stdout.includes('running');
+            updateStatusBar(isRunning ? 'running' : 'stopped');
+            vscode.window.showInformationMessage(
+                `Agent Monitor: http://localhost:${port}/${projectName} - Agent ${isRunning ? 'Running' : 'Stopped'}`
+            );
+        });
+    }, 6000);
 }
 
 // ---- Commands ----
