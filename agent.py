@@ -378,6 +378,7 @@ class FileEventHandler(FileSystemEventHandler):
         self.ignore_pattterns = ignore_patterns
         self.file_contents = {}
         self._was_paused = False
+        self._last_event_time = {}  # path -> timestamp for debounce
         self._preload_file_contents()
 
     def _preload_file_contents(self):
@@ -458,6 +459,12 @@ class FileEventHandler(FileSystemEventHandler):
         if not self.should_process(path):
             return
 
+        # Debounce: skip if same file was logged within 2 seconds
+        now = time.time()
+        last = self._last_event_time.get(path, 0)
+        if now - last < 2.0:
+            return
+
         new_content = self.get_file_content(path)
         old_content = self.file_contents.get(path, "")
 
@@ -471,12 +478,18 @@ class FileEventHandler(FileSystemEventHandler):
         else:
             diff = None
 
+        # Skip if no actual content change (metadata-only event)
+        if not diff:
+            self.file_contents[path] = new_content
+            return
+
         # Count lines added and detect source
         lines_added = 0
         if diff:
             lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
         source = detect_editor_source(path, lines_added)
 
+        self._last_event_time[path] = now
         self.file_contents[path] = new_content
         self.log_writer.write("FILE_MODIFIED", path, diff=diff, source=source, branch=get_current_branch())
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {path} (via {source})")
@@ -530,6 +543,12 @@ class FileEventHandler(FileSystemEventHandler):
         if not self.should_process(dest_path):
             return
 
+        # Debounce: skip if same file was logged within 2 seconds
+        now = time.time()
+        last = self._last_event_time.get(dest_path, 0)
+        if now - last < 2.0:
+            return
+
         # Get old content — check pending deletes first (atomic write pattern)
         self._pending_deletes = getattr(self, '_pending_deletes', {})
         old_content = self.file_contents.get(dest_path, "") or self._pending_deletes.pop(dest_path, "")
@@ -553,6 +572,7 @@ class FileEventHandler(FileSystemEventHandler):
             lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
         source = detect_editor_source(dest_path, lines_added)
 
+        self._last_event_time[dest_path] = now
         self.file_contents[dest_path] = new_content
         self.log_writer.write("FILE_RENAMED", dest_path, diff=diff, source=source, branch=get_current_branch())
         print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_RENAMED: {dest_path} (via {source})")
