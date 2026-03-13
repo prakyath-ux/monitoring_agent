@@ -111,6 +111,7 @@ async function launchStreamlit(cwd) {
         'run', uiPy,
         '--server.address', '0.0.0.0',
         '--server.port', String(port),
+        '--server.headless', 'true',
         '--server.baseUrlPath', projectName
     ], {
         cwd: cwd,
@@ -126,15 +127,12 @@ async function launchStreamlit(cwd) {
 
     streamlitProcess.unref();
 
-    streamlitProcess.on('error', (err) => {
-        vscode.window.showErrorMessage(`Streamlit failed: ${err.message}`);
+    streamlitProcess.on('error', () => {
         updateStatusBar('stopped');
     });
 
     streamlitProcess.on('exit', (code) => {
         if (code !== 0 && code !== null) {
-            const errMsg = stderrData.split('\n').slice(-3).join(' ').trim();
-            vscode.window.showErrorMessage(`Streamlit crashed (code ${code}): ${errMsg || 'unknown'}`);
             updateStatusBar('stopped');
             streamlitProcess = null;
         }
@@ -164,9 +162,6 @@ async function launchStreamlit(cwd) {
         execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd, timeout: 10000 }, (err, stdout) => {
             const isRunning = stdout && stdout.includes('running');
             updateStatusBar(isRunning ? 'running' : 'stopped');
-            vscode.window.showInformationMessage(
-                `Agent Monitor: http://localhost:${port}/${projectName} - Agent ${isRunning ? 'Running' : 'Stopped'}`
-            );
         });
     }, 6000);
 }
@@ -223,7 +218,6 @@ async function stopAgent() {
     }
 
     updateStatusBar('stopped');
-    vscode.window.showInformationMessage('Agent Monitor stopped.');
 }
 
 async function checkStatus() {
