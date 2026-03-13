@@ -147,25 +147,10 @@ async function launchStreamlit(cwd) {
         const agentPy = path.join(AGENT_HOME, 'agent.py');
 
         // Fire and forget — agent.py start may not return on Windows
-        if (IS_WIN) {
-            // Use pythonw.exe (no console window) or fall back to cmd /c start /B
-            const pythonwPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'pythonw.exe');
-            if (fs.existsSync(pythonwPath)) {
-                const startProc = spawn(pythonwPath, [agentPy, '--project-dir', cwd, 'start'], {
-                    cwd, env: MIN_ENV, detached: true, windowsHide: true, stdio: 'ignore'
-                });
-                startProc.unref();
-            } else {
-                spawn('cmd.exe', ['/c', 'start', '/B', '', pythonPath, agentPy, '--project-dir', cwd, 'start'], {
-                    cwd, env: MIN_ENV, windowsHide: true, stdio: 'ignore'
-                });
-            }
-        } else {
-            const startProc = spawn(pythonPath, [agentPy, '--project-dir', cwd, 'start'], {
-                cwd, env: MIN_ENV, detached: true, stdio: 'ignore'
-            });
-            startProc.unref();
-        }
+        const startProc = spawn(pythonPath, [agentPy, '--project-dir', cwd, 'start'], {
+            cwd, env: MIN_ENV, detached: true, windowsHide: true, stdio: 'ignore'
+        });
+        startProc.unref();
     }, 2000);
 
     // Check real status after giving agent time to start
