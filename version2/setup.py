@@ -81,23 +81,33 @@ def check_venv(current_os):
 
 #------ Installation Steps------------
 def clone_repo():
-    if (AGENT_HOME / "agent.py").exists():
+    git_dir = AGENT_HOME / ".git"
+
+    # Case 1: Valid clone exists — just pull latest
+    if git_dir.exists() and (AGENT_HOME / "agent.py").exists():
         logging.info("Agent code already exists. Pulling latest...")
         subprocess.run(
             ["git", "pull", "origin", BRANCH],
-            cwd=str(AGENT_HOME), capture_output=True, timeout=60      
+            cwd=str(AGENT_HOME), capture_output=True, timeout=60
         )
         return True
-    
+
+    # Case 2: Directory exists but not a valid clone — remove and re-clone
+    if AGENT_HOME.exists():
+        logging.warning(f"{AGENT_HOME} exists but is not a valid agent install. Removing...")
+        shutil.rmtree(str(AGENT_HOME))
+        logging.info("Old directory removed.")
+
+    # Case 3: Fresh clone
     logging.info("Cloning agent repository...")
     try:
         subprocess.run(
             ["git", "clone", "-b", BRANCH, REPO_URL, str(AGENT_HOME)],
-            capture_output=True, timeout=120, check=True 
+            capture_output=True, timeout=120, check=True
         )
         logging.info("Clone Complete.")
         return True
-    
+
     except subprocess.CalledProcessError as e:
         logging.error(f"Clone failed: {e.stderr}")
         return False
