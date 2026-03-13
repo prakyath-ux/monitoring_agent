@@ -10,7 +10,7 @@ from datetime import datetime
 # ── Page Configuration ──
 _project_name = os.path.basename(os.environ.get("AGENT_PROJECT_DIR", os.getcwd()))
 st.set_page_config(
-    page_title=f"RepoAgent - {_project_name}",
+    page_title=f"RepoAgent v2 - {_project_name}",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
