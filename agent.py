@@ -21,7 +21,8 @@ def is_pid_alive(pid):
         try:
             result = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}"],
-                capture_output=True, text=True, timeout=3
+                capture_output=True, text=True, timeout=3,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             return str(pid) in result.stdout
         except Exception:
@@ -183,7 +184,8 @@ def detect_editor_source(file_path, diff_lines_added=0):
             if system == "Windows":
                 result = subprocess.run(
                     ['tasklist', '/FI', f'IMAGENAME eq {name}*'],
-                    capture_output=True, text=True, timeout=2
+                    capture_output=True, text=True, timeout=2,
+                    creationflags=subprocess.CREATE_NO_WINDOW
                 )
                 return name.lower() in result.stdout.lower()
             else:
@@ -980,7 +982,8 @@ def cmd_stop():
         if IS_WINDOWS:
             import subprocess
             subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                           capture_output=True, timeout=5)
+                           capture_output=True, timeout=5,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
         else:
             os.kill(pid, signal.SIGTERM)
         print(f"Agent stopped (PID: {pid})")

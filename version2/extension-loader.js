@@ -175,7 +175,7 @@ async function launchStreamlit(cwd) {
         const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
         const agentPy = path.join(AGENT_HOME, 'agent.py');
 
-        execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd, timeout: 10000 }, (err, stdout) => {
+        execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd, timeout: 10000, windowsHide: true }, (err, stdout) => {
             const isRunning = stdout && stdout.includes('running');
             updateStatusBar(isRunning ? 'running' : 'stopped');
         });
@@ -230,7 +230,7 @@ async function stopAgent() {
 
     const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
     if (fs.existsSync(pythonPath)) {
-        execFile(pythonPath, [path.join(AGENT_HOME, 'agent.py'), '--project-dir', cwd, 'stop'], { cwd });
+        execFile(pythonPath, [path.join(AGENT_HOME, 'agent.py'), '--project-dir', cwd, 'stop'], { cwd, windowsHide: true });
     }
 
     updateStatusBar('stopped');
@@ -246,7 +246,7 @@ async function checkStatus() {
         return;
     }
 
-    execFile(pythonPath, [path.join(AGENT_HOME, 'agent.py'), '--project-dir', cwd, 'status'], { cwd }, (err, stdout) => {
+    execFile(pythonPath, [path.join(AGENT_HOME, 'agent.py'), '--project-dir', cwd, 'status'], { cwd, windowsHide: true }, (err, stdout) => {
         const msg = stdout ? stdout.trim() : 'Agent status unknown';
         vscode.window.showInformationMessage(msg);
         updateStatusBar(msg.includes('running') ? 'running' : 'stopped');
