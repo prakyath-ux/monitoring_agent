@@ -116,6 +116,7 @@ async function launchStreamlit(cwd) {
     ], {
         cwd: cwd,
         detached: true,
+        windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...MIN_ENV, AGENT_PROJECT_DIR: cwd, AGENT_STREAMLIT_PORT: String(port) }
     });
@@ -147,7 +148,7 @@ async function launchStreamlit(cwd) {
 
         // Fire and forget — agent.py start may not return on Windows
         const startProc = spawn(pythonPath, [agentPy, '--project-dir', cwd, 'start'], {
-            cwd, env: MIN_ENV, detached: true, stdio: 'ignore'
+            cwd, env: MIN_ENV, detached: true, windowsHide: true, stdio: 'ignore'
         });
         startProc.unref();
     }, 2000);
