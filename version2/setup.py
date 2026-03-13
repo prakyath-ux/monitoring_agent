@@ -16,7 +16,7 @@ from pathlib import Path
 # ----- Config ------
 AGENT_HOME = Path.home() / ".agent-monitor"
 REPO_URL = "https://github.com/prakyath-ux/monitoring_agent.git"
-BRANCH = "agent_scaling"
+BRANCH = "version2"
 SERVICE_NAME = "agent-monitor"
 LOG_FILE = AGENT_HOME / "install.log"
 

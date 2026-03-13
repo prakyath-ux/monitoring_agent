@@ -1,0 +1,43 @@
+{
+  "name": "agent-monitor",
+  "displayName": "Agent Monitor",
+  "description": "Thin loader - calls setup.py for install, launches Streamlit dashboard",
+  "version": "2.0.0",
+  "publisher": "impacto-infra",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentMonitor.start",
+        "title": "Agent: Start"
+      },
+      {
+        "command": "agentMonitor.stop",
+        "title": "Agent: Stop"
+      },
+      {
+        "command": "agentMonitor.status",
+        "title": "Agent: Status"
+      }
+    ]
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
