@@ -60,6 +60,15 @@ function ensureSetup(cwd) {
     const streamlitPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'streamlit' + EXE);
     const agentDir = path.join(cwd, '.agent');
 
+    // Always pull latest code on startup (silent, non-blocking if fails)
+    if (fs.existsSync(path.join(AGENT_HOME, '.git'))) {
+        try {
+            execSync(`git -C "${AGENT_HOME}" pull origin ${BRANCH}`, {
+                timeout: 30000, env: MIN_ENV, stdio: 'ignore'
+            });
+        } catch (e) {}
+    }
+
     // Already fully set up? Skip everything
     if (fs.existsSync(path.join(AGENT_HOME, '.git'))
         && fs.existsSync(streamlitPath)
@@ -159,14 +168,19 @@ async function launchStreamlit(cwd) {
         }
     });
 
+    // Wait for Streamlit + agent to start, then check real status
     setTimeout(() => {
-        if (streamlitProcess && !streamlitProcess.killed) {
-            updateStatusBar('running');
+        if (!streamlitProcess || streamlitProcess.killed) return;
+
+        const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
+        execFile(pythonPath, [path.join(AGENT_HOME, 'agent.py'), '--project-dir', cwd, 'status'], { cwd }, (err, stdout) => {
+            const isRunning = stdout && stdout.includes('running');
+            updateStatusBar(isRunning ? 'running' : 'stopped');
             vscode.window.showInformationMessage(
-                `Agent Monitor running: http://localhost:${port}/${projectName}`
+                `Agent Monitor: http://localhost:${port}/${projectName} - Agent ${isRunning ? 'Running' : 'Stopped'}`
             );
-        }
-    }, 3000);
+        });
+    }, 5000);
 }
 
 // ---- Commands ----
