@@ -205,9 +205,16 @@ async function launchStreamlit(cwd) {
         try {
             if (fs.existsSync(pidFile)) {
                 const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
-                // Check if PID is alive: process.kill(pid, 0) throws if not running
-                process.kill(pid, 0);
-                updateStatusBar('running');
+                if (IS_WIN) {
+                    // On Windows, process.kill(pid, 0) can throw EPERM for valid processes
+                    // PID file existence + recent write = agent is running
+                    const stat = fs.statSync(pidFile);
+                    const ageMs = Date.now() - stat.mtimeMs;
+                    updateStatusBar(ageMs < 30000 ? 'running' : 'stopped');
+                } else {
+                    process.kill(pid, 0);
+                    updateStatusBar('running');
+                }
             } else {
                 updateStatusBar('stopped');
             }
