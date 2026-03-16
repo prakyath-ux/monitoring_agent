@@ -211,11 +211,9 @@ async function launchStreamlit(cwd) {
             if (fs.existsSync(pidFile)) {
                 const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
                 if (IS_WIN) {
-                    // On Windows, process.kill(pid, 0) can throw EPERM for valid processes
-                    // PID file existence + recent write = agent is running
-                    const stat = fs.statSync(pidFile);
-                    const ageMs = Date.now() - stat.mtimeMs;
-                    updateStatusBar(ageMs < 30000 ? 'running' : 'stopped');
+                    // On Windows, process.kill(pid, 0) throws EPERM for valid processes
+                    // PID file exists + has valid PID = agent is running (agent deletes PID on shutdown)
+                    updateStatusBar(pid > 0 ? 'running' : 'stopped');
                 } else {
                     process.kill(pid, 0);
                     updateStatusBar('running');
