@@ -115,7 +115,6 @@ async function launchStreamlit(cwd) {
         '--server.baseUrlPath', projectName
     ], {
         cwd: cwd,
-        detached: true,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...MIN_ENV, AGENT_PROJECT_DIR: cwd, AGENT_STREAMLIT_PORT: String(port) }
@@ -146,9 +145,9 @@ async function launchStreamlit(cwd) {
         const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
         const agentPy = path.join(AGENT_HOME, 'agent.py');
 
-        // Fire and forget — agent.py start may not return on Windows
+        // Fire and forget — windowsHide hides console, no detached (it forces a new console on Windows)
         const startProc = spawn(pythonPath, [agentPy, '--project-dir', cwd, 'start'], {
-            cwd, env: MIN_ENV, detached: true, windowsHide: true, stdio: 'ignore'
+            cwd, env: MIN_ENV, windowsHide: true, stdio: 'ignore'
         });
         startProc.unref();
     }, 2000);
@@ -207,7 +206,7 @@ async function stopAgent() {
             if (IS_WIN) {
                 execSync(`taskkill /PID ${streamlitProcess.pid} /T /F`, { stdio: 'ignore' });
             } else {
-                process.kill(-streamlitProcess.pid);
+                process.kill(streamlitProcess.pid);
             }
         } catch (e) {}
         streamlitProcess = null;
@@ -261,7 +260,7 @@ function deactivate() {
             if (IS_WIN) {
                 execSync(`taskkill /PID ${streamlitProcess.pid} /T /F`, { stdio: 'ignore' });
             } else {
-                process.kill(-streamlitProcess.pid);
+                process.kill(streamlitProcess.pid);
             }
         } catch (e) {}
     }
