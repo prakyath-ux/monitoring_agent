@@ -34,24 +34,18 @@ function findFreePort(start = 8501) {
 }
 
 function getLocalIP() {
-    // UDP trick: connect to dashboard server to find which local interface routes to it
-    try {
-        const sock = require('dgram').createSocket('udp4');
-        sock.connect(5000, '10.0.3.55');
-        const addr = sock.address().address;
-        sock.close();
-        if (addr && !addr.startsWith('127.')) return addr;
-    } catch (e) {}
-    // Fallback: first non-internal IPv4
     const interfaces = os.networkInterfaces();
+    let fallback = '127.0.0.1';
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
             if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
+                // Prefer the LAN subnet that matches the dashboard server
+                if (iface.address.startsWith('10.0.3.')) return iface.address;
+                if (fallback === '127.0.0.1') fallback = iface.address;
             }
         }
     }
-    return '127.0.0.1';
+    return fallback;
 }
 
 function registerWithDashboard(projectName, port) {
