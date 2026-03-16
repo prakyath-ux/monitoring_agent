@@ -163,7 +163,7 @@ async function launchStreamlit(cwd) {
             const isRunning = stdout && stdout.includes('running');
             updateStatusBar(isRunning ? 'running' : 'stopped');
         });
-    }, 6000);
+    }, 12000);
 }
 
 // ---- Commands ----
