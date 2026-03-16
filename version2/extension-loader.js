@@ -34,6 +34,15 @@ function findFreePort(start = 8501) {
 }
 
 function getLocalIP() {
+    // UDP trick: connect to dashboard server to find which local interface routes to it
+    try {
+        const sock = require('dgram').createSocket('udp4');
+        sock.connect(5000, '10.0.3.55');
+        const addr = sock.address().address;
+        sock.close();
+        if (addr && !addr.startsWith('127.')) return addr;
+    } catch (e) {}
+    // Fallback: first non-internal IPv4
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
