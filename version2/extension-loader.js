@@ -152,18 +152,24 @@ async function launchStreamlit(cwd) {
         startProc.unref();
     }, 2000);
 
-    // Check real status after giving agent time to start
+    // Check real status by reading PID file directly (no subprocess needed)
     setTimeout(() => {
         if (!streamlitProcess || streamlitProcess.killed) return;
 
-        const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
-        const agentPy = path.join(AGENT_HOME, 'agent.py');
-
-        execFile(pythonPath, [agentPy, '--project-dir', cwd, 'status'], { cwd, timeout: 10000, windowsHide: true }, (err, stdout) => {
-            const isRunning = stdout && stdout.includes('running');
-            updateStatusBar(isRunning ? 'running' : 'stopped');
-        });
-    }, 12000);
+        const pidFile = path.join(cwd, '.agent', '.pid');
+        try {
+            if (fs.existsSync(pidFile)) {
+                const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+                // Check if PID is alive: process.kill(pid, 0) throws if not running
+                process.kill(pid, 0);
+                updateStatusBar('running');
+            } else {
+                updateStatusBar('stopped');
+            }
+        } catch (e) {
+            updateStatusBar('stopped');
+        }
+    }, 10000);
 }
 
 // ---- Commands ----
