@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const net = require('net');
+const http = require('http');
 
 let statusBarItem;
 let streamlitProcess = null;
@@ -30,6 +31,42 @@ function findFreePort(start = 8501) {
         });
         server.on('error', () => resolve(findFreePort(start + 1)));
     });
+}
+
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '127.0.0.1';
+}
+
+function registerWithDashboard(projectName, port) {
+    try {
+        const ip = getLocalIP();
+        const devName = os.userInfo().username;
+        const machine = os.hostname();
+        const data = JSON.stringify({
+            dev_name: devName,
+            project_name: projectName,
+            network_url: `http://${ip}:${port}/${projectName}`,
+            machine: machine
+        });
+
+        const req = http.request({
+            hostname: '10.0.3.55',
+            port: 5000,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
+        });
+        req.on('error', () => {}); // Silent fail
+        req.write(data);
+        req.end();
+    } catch (e) {} // Silent fail
 }
 
 function getWorkspacePath() {
@@ -151,6 +188,11 @@ async function launchStreamlit(cwd) {
         });
         startProc.unref();
     }, 2000);
+
+    // Register with central dashboard once Streamlit is up
+    setTimeout(() => {
+        registerWithDashboard(projectName, port);
+    }, 8000);
 
     // Check real status by reading PID file directly (no subprocess needed)
     setTimeout(() => {
