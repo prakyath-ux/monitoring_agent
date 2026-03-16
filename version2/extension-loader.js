@@ -11,6 +11,7 @@ const http = require('http');
 
 let statusBarItem;
 let streamlitProcess = null;
+let heartbeatInterval = null;
 
 const AGENT_HOME = path.join(os.homedir(), '.agent-monitor');
 const IS_WIN = process.platform === 'win32';
@@ -192,9 +193,13 @@ async function launchStreamlit(cwd) {
         startProc.unref();
     }, 2000);
 
-    // Register with central dashboard once Streamlit is up
+    // Register with central dashboard once Streamlit is up, then heartbeat every 60s
     setTimeout(() => {
         registerWithDashboard(projectName, port);
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(() => {
+            registerWithDashboard(projectName, port);
+        }, 60000);
     }, 8000);
 
     // Check real status by reading PID file directly (no subprocess needed)
@@ -313,6 +318,7 @@ function activate(context) {
 }
 
 function deactivate() {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
     if (streamlitProcess && !streamlitProcess.killed) {
         try {
             if (IS_WIN) {
