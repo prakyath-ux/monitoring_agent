@@ -30,3 +30,10 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Extension build artifacts
+version2/extension/node_modules/
+version2/extension/package-lock.json
+
+# SonarQube rule data (fetched locally, not tracked)
+sonar_rules/

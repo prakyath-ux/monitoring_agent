@@ -1,37 +1,80 @@
 #!/bin/bash
-# ── Agent Monitor Startup Script ──
+# ── Agent Monitor Startup Script (version2) ──
 # Works with any IDE (IntelliJ, PyCharm, Sublime, Terminal)
-# Same behavior as the VS Code extension
+# Matches VS Code extension behavior: silent, heartbeat, auto-pull
 
 AGENT_HOME="$HOME/.agent-monitor"
+REPO_URL="https://github.com/prakyath-ux/monitoring_agent.git"
+BRANCH="version2"
+DASHBOARD_SERVER="10.0.3.55"
+DASHBOARD_PORT="5000"
 PROJECT_DIR="${1:-$(pwd)}"
 PROJECT_NAME="$(basename "$PROJECT_DIR")"
 
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# ── Check and install prerequisites ──
+if ! command -v git &> /dev/null; then
+    echo "Installing git..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        xcode-select --install 2>/dev/null || brew install git
+    else
+        sudo apt-get update -qq && sudo apt-get install -y -qq git
+    fi
+fi
 
-# ── Preflight checks ──
-if [ ! -d "$AGENT_HOME" ]; then
-    echo -e "${RED}[ERROR] Agent not installed. Run: git clone -b agent_scaling https://github.com/prakyath-ux/monitoring_agent.git ~/.agent-monitor${NC}"
+if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+    echo "Installing Python..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        brew install python3
+    else
+        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-venv python3-pip
+    fi
+fi
+
+# Verify installs worked
+if ! command -v git &> /dev/null; then
+    echo "Git installation failed. Install manually and re-run."
+    exit 1
+fi
+if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+    echo "Python installation failed. Install manually and re-run."
     exit 1
 fi
 
-if [ ! -f "$AGENT_HOME/venv/bin/python" ] && [ ! -f "$AGENT_HOME/venv/Scripts/python.exe" ]; then
-    echo -e "${YELLOW}[SETUP] Creating virtual environment...${NC}"
-    python3 -m venv "$AGENT_HOME/venv"
-    "$AGENT_HOME/venv/bin/pip" install -r "$AGENT_HOME/requirements.txt"
+# ── Clone if not installed ──
+if [ ! -d "$AGENT_HOME/.git" ]; then
+    if [ -d "$AGENT_HOME" ]; then
+        rm -rf "$AGENT_HOME"
+    fi
+    echo "Installing agent..."
+    git clone -b "$BRANCH" "$REPO_URL" "$AGENT_HOME" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Clone failed."
+        exit 1
+    fi
 fi
 
+# ── Auto-pull latest code ──
+git -C "$AGENT_HOME" pull origin "$BRANCH" > /dev/null 2>&1
+
+# ── Run setup.py if venv or .agent missing ──
 PYTHON="$AGENT_HOME/venv/bin/python"
 STREAMLIT="$AGENT_HOME/venv/bin/streamlit"
+SETUP_PY="$AGENT_HOME/version2/setup.py"
 
-# ── Initialize project if needed ──
-if [ ! -d "$PROJECT_DIR/.agent" ]; then
-    echo -e "${YELLOW}[INIT] Initializing monitoring for: $PROJECT_NAME${NC}"
-    "$PYTHON" "$AGENT_HOME/agent.py" --project-dir "$PROJECT_DIR" init
+if [ ! -f "$PYTHON" ] || [ ! -d "$PROJECT_DIR/.agent" ]; then
+    echo "Running setup..."
+    python3 "$SETUP_PY" "$PROJECT_DIR"
+    if [ $? -ne 0 ]; then
+        echo "Setup failed."
+        exit 1
+    fi
+fi
+
+# ── Check if already running for this project ──
+EXISTING_PID=$(ps aux | grep "[s]treamlit.*$PROJECT_NAME" | awk '{print $2}')
+if [ -n "$EXISTING_PID" ]; then
+    echo "Agent already running."
+    exit 0
 fi
 
 # ── Find free port starting from 8501 ──
@@ -45,33 +88,59 @@ find_free_port() {
 
 PORT=$(find_free_port)
 
-# ── Check if already running for this project ──
-EXISTING_PID=$(ps aux | grep "[s]treamlit.*$PROJECT_NAME" | awk '{print $2}')
-if [ -n "$EXISTING_PID" ]; then
-    echo -e "${GREEN}[OK] Agent already running for $PROJECT_NAME${NC}"
-    echo -e "${GREEN}[OK] Dashboard: http://localhost:$PORT/$PROJECT_NAME${NC}"
-    exit 0
-fi
+# ── Get LAN IP (prefer 10.0.3.x subnet) ──
+get_lan_ip() {
+    local ip
+    ip=$(ifconfig 2>/dev/null | grep "inet " | grep "10\.0\.3\." | awk '{print $2}' | head -1)
+    if [ -z "$ip" ]; then
+        ip=$(ifconfig 2>/dev/null | grep "inet " | grep -v "127\.0\.0\.1" | awk '{print $2}' | head -1)
+    fi
+    echo "${ip:-127.0.0.1}"
+}
 
-# ── Start Streamlit UI in background ──
-echo -e "${GREEN}[START] Launching agent for: $PROJECT_NAME${NC}"
+LAN_IP=$(get_lan_ip)
+
+# ── Start Streamlit silently in background ──
 AGENT_PROJECT_DIR="$PROJECT_DIR" AGENT_STREAMLIT_PORT="$PORT" \
     "$STREAMLIT" run "$AGENT_HOME/UI.py" \
     --server.address 0.0.0.0 \
     --server.port "$PORT" \
+    --server.headless true \
     --server.baseUrlPath "$PROJECT_NAME" \
     > /dev/null 2>&1 &
 
 STREAMLIT_PID=$!
-echo $STREAMLIT_PID > "$PROJECT_DIR/.agent/.streamlit_pid"
 
 sleep 2
 
-if kill -0 $STREAMLIT_PID 2>/dev/null; then
-    echo -e "${GREEN}[OK] Agent Monitor running${NC}"
-    echo -e "${GREEN}[OK] Dashboard: http://localhost:$PORT/$PROJECT_NAME${NC}"
-    echo -e "${GREEN}[OK] PID: $STREAMLIT_PID${NC}"
-else
-    echo -e "${RED}[ERROR] Streamlit failed to start${NC}"
+if ! kill -0 $STREAMLIT_PID 2>/dev/null; then
+    echo "Failed to start."
     exit 1
 fi
+
+# ── Start agent in background ──
+"$PYTHON" "$AGENT_HOME/agent.py" --project-dir "$PROJECT_DIR" start > /dev/null 2>&1 &
+
+# ── Register with central dashboard ──
+register() {
+    curl -s -X POST "http://$DASHBOARD_SERVER:$DASHBOARD_PORT" \
+        -H "Content-Type: application/json" \
+        -d "{\"dev_name\":\"$(whoami)\",\"project_name\":\"$PROJECT_NAME\",\"network_url\":\"http://$LAN_IP:$PORT/$PROJECT_NAME\",\"machine\":\"$(hostname)\"}" \
+        > /dev/null 2>&1
+}
+
+register
+
+# ── Heartbeat every 60s in background ──
+while true; do
+    sleep 60
+    register
+done &
+
+HEARTBEAT_PID=$!
+
+# ── Save PIDs for cleanup ──
+echo "$STREAMLIT_PID" > "$PROJECT_DIR/.agent/.streamlit_pid"
+echo "$HEARTBEAT_PID" > "$PROJECT_DIR/.agent/.heartbeat_pid"
+
+echo "Agent started."
