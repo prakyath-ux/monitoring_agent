@@ -63,7 +63,11 @@ SETUP_PY="$AGENT_HOME/version2/setup.py"
 
 if [ ! -f "$PYTHON" ] || [ ! -d "$PROJECT_DIR/.agent" ]; then
     echo "Running setup..."
-    python3 "$SETUP_PY" "$PROJECT_DIR"
+    if command -v python3 &> /dev/null; then
+        python3 "$SETUP_PY" "$PROJECT_DIR"
+    else
+        python "$SETUP_PY" "$PROJECT_DIR"
+    fi
     if [ $? -ne 0 ]; then
         echo "Setup failed."
         exit 1
@@ -71,10 +75,12 @@ if [ ! -f "$PYTHON" ] || [ ! -d "$PROJECT_DIR/.agent" ]; then
 fi
 
 # ── Check if already running for this project ──
-EXISTING_PID=$(ps aux | grep "[s]treamlit.*$PROJECT_NAME" | awk '{print $2}')
-if [ -n "$EXISTING_PID" ]; then
-    echo "Agent already running."
-    exit 0
+if [ -f "$PROJECT_DIR/.agent/.pid" ]; then
+    PID=$(cat "$PROJECT_DIR/.agent/.pid")
+    if kill -0 "$PID" 2>/dev/null; then
+        echo "Agent already running."
+        exit 0
+    fi
 fi
 
 # ── Find free port starting from 8501 ──

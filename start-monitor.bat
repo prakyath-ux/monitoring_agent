@@ -80,9 +80,8 @@ if errorlevel 1 (
 
 :skip_setup
 
-REM ── Check if already running ──
-tasklist /FI "IMAGENAME eq streamlit.exe" 2>nul | find /i "streamlit" > nul
-if not errorlevel 1 (
+REM ── Check if already running for this project ──
+if exist "%PROJECT_DIR%\.agent\.pid" (
     echo Agent already running.
     exit /b 0
 )
@@ -117,6 +116,13 @@ start /b "" "%STREAMLIT%" run "%AGENT_HOME%\UI.py" --server.address 0.0.0.0 --se
 
 timeout /t 2 /nobreak > nul
 
+REM ── Save Streamlit PID for cleanup ──
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
+    echo %%p > "%PROJECT_DIR%\.agent\.streamlit_pid"
+    goto :pid_saved
+)
+:pid_saved
+
 REM ── Start agent in background ──
 start /b "" "%PYTHON%" "%AGENT_HOME%\agent.py" --project-dir "%PROJECT_DIR%" start > nul 2>&1
 
@@ -124,6 +130,6 @@ REM ── Register with central dashboard ──
 curl -s -X POST "http://%DASHBOARD_SERVER%:%DASHBOARD_PORT%" -H "Content-Type: application/json" -d "{\"dev_name\":\"%USERNAME%\",\"project_name\":\"%PROJECT_NAME%\",\"network_url\":\"http://%LAN_IP%:%PORT%/%PROJECT_NAME%\",\"machine\":\"%COMPUTERNAME%\"}" > nul 2>&1
 
 REM ── Start heartbeat in background (separate hidden process) ──
-start /b "" cmd /c "%~dp0heartbeat.bat" "%DASHBOARD_SERVER%" "%DASHBOARD_PORT%" "%USERNAME%" "%PROJECT_NAME%" "%LAN_IP%" "%PORT%" "%COMPUTERNAME%" > nul 2>&1
+start /b "" cmd /c "%AGENT_HOME%\heartbeat.bat" "%DASHBOARD_SERVER%" "%DASHBOARD_PORT%" "%USERNAME%" "%PROJECT_NAME%" "%LAN_IP%" "%PORT%" "%COMPUTERNAME%" > nul 2>&1
 
 echo Agent started.
