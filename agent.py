@@ -920,6 +920,18 @@ def cmd_init():
 
 def cmd_start():
     """Start the file watcher in background"""
+    # Auto-pull latest code (works for all startup methods: extension, script, OS service)
+    agent_home = Path(__file__).resolve().parent
+    if (agent_home / ".git").exists():
+        try:
+            subprocess.run(
+                ["git", "-C", str(agent_home), "pull", "origin", "version2"],
+                capture_output=True, timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW if IS_WINDOWS else 0
+            )
+        except Exception:
+            pass
+
     # Check if already running
     if Path(PID_FILE).exists():
         pid = int(Path(PID_FILE).read_text(encoding="utf-8", errors="replace"))
