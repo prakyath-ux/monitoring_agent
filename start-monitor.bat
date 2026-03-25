@@ -11,30 +11,54 @@ set "BRANCH=version2"
 set "DASHBOARD_SERVER=10.0.3.55"
 set "DASHBOARD_PORT=5000"
 
-REM ── Check and install prerequisites ──
+REM ── Check and install Git ──
 where git > nul 2>&1
 if errorlevel 1 (
     echo Installing Git...
-    winget install Git.Git --silent --accept-package-agreements --accept-source-agreements
+    REM Try winget first
+    where winget > nul 2>&1
+    if not errorlevel 1 (
+        winget install Git.Git --silent --accept-package-agreements --accept-source-agreements
+    ) else (
+        REM Fallback: direct download
+        echo Downloading Git installer...
+        curl -sL "https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe" -o "%TEMP%\git-installer.exe"
+        "%TEMP%\git-installer.exe" /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
+        del "%TEMP%\git-installer.exe" > nul 2>&1
+    )
     set "PATH=%PATH%;C:\Program Files\Git\cmd"
 )
 
-where python > nul 2>&1
-if errorlevel 1 (
+REM ── Check and install Python (also handle Microsoft Store redirect) ──
+set "PYTHON_OK=0"
+python --version > nul 2>&1
+if not errorlevel 1 set "PYTHON_OK=1"
+if "%PYTHON_OK%"=="0" (
     echo Installing Python...
-    winget install Python.Python.3.11 --silent --accept-package-agreements --accept-source-agreements
+    REM Try winget first
+    where winget > nul 2>&1
+    if not errorlevel 1 (
+        winget install Python.Python.3.11 --silent --accept-package-agreements --accept-source-agreements
+    ) else (
+        REM Fallback: direct download
+        echo Downloading Python installer...
+        curl -sL "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe" -o "%TEMP%\python-installer.exe"
+        "%TEMP%\python-installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+        del "%TEMP%\python-installer.exe" > nul 2>&1
+    )
     set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts"
 )
 
 REM ── Verify installs ──
 where git > nul 2>&1
 if errorlevel 1 (
-    echo Git installation failed. Install manually and re-run.
+    echo Git installation failed. Install manually from https://git-scm.com and re-run.
     exit /b 1
 )
-where python > nul 2>&1
+python --version > nul 2>&1
 if errorlevel 1 (
     echo Python installation failed. Close and reopen terminal, then re-run.
+    echo If still failing, install from https://python.org and check "Add to PATH".
     exit /b 1
 )
 
@@ -82,8 +106,14 @@ if errorlevel 1 (
 
 REM ── Check if already running for this project ──
 if exist "%PROJECT_DIR%\.agent\.pid" (
-    echo Agent already running.
-    exit /b 0
+    set /p AGENT_PID=<"%PROJECT_DIR%\.agent\.pid"
+    tasklist /FI "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" > nul 2>&1
+    if not errorlevel 1 (
+        echo Agent already running.
+        exit /b 0
+    )
+    REM Stale PID file — remove it
+    del "%PROJECT_DIR%\.agent\.pid" > nul 2>&1
 )
 
 REM ── Find free port starting from 8501 ──
@@ -97,16 +127,21 @@ if not errorlevel 1 (
 
 REM ── Get LAN IP (prefer 10.0.3.x subnet) ──
 set "LAN_IP=127.0.0.1"
+set "FALLBACK_IP=127.0.0.1"
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
     for /f "tokens=1" %%b in ("%%a") do (
-        echo %%b | findstr "10\.0\.3\." > nul 2>&1
+        echo %%b | findstr "10.0.3." > nul 2>&1
         if not errorlevel 1 (
             set "LAN_IP=%%b"
             goto :ip_found
         )
-        if "!LAN_IP!"=="127.0.0.1" set "LAN_IP=%%b"
+        if "!FALLBACK_IP!"=="127.0.0.1" (
+            echo %%b | findstr "127.0.0.1" > nul 2>&1
+            if errorlevel 1 set "FALLBACK_IP=%%b"
+        )
     )
 )
+if "!LAN_IP!"=="127.0.0.1" set "LAN_IP=!FALLBACK_IP!"
 :ip_found
 
 REM ── Start Streamlit silently in background ──

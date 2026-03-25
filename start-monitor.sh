@@ -15,18 +15,46 @@ PROJECT_NAME="$(basename "$PROJECT_DIR")"
 if ! command -v git &> /dev/null; then
     echo "Installing git..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        xcode-select --install 2>/dev/null || brew install git
+        # xcode-select includes git on Mac
+        xcode-select --install 2>/dev/null
+        echo "Xcode tools installing. Wait for the popup to complete, then re-run this script."
+        exit 0
     else
-        sudo apt-get update -qq && sudo apt-get install -y -qq git
+        # Linux: try apt, yum, dnf
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq git
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y git
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y git
+        else
+            echo "Git not found. Install git manually and re-run."
+            exit 1
+        fi
     fi
 fi
 
 if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
     echo "Installing Python..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install python3
+        if command -v brew &> /dev/null; then
+            brew install python3
+        else
+            echo "Python not found. Install from https://python.org or run: brew install python3"
+            exit 1
+        fi
     else
-        sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-venv python3-pip
+        # Linux: try apt, yum, dnf
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-venv python3-pip
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y python3 python3-pip
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y python3 python3-pip
+        else
+            echo "Python not found. Install Python 3.9+ manually and re-run."
+            exit 1
+        fi
     fi
 fi
 
@@ -96,10 +124,17 @@ PORT=$(find_free_port)
 
 # ── Get LAN IP (prefer 10.0.3.x subnet) ──
 get_lan_ip() {
+    local all_ips
+    # Try ifconfig (Mac) then ip addr (Linux)
+    all_ips=$(ifconfig 2>/dev/null | grep "inet " | awk '{print $2}')
+    if [ -z "$all_ips" ]; then
+        all_ips=$(ip -4 addr show 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f1)
+    fi
+    # Prefer 10.0.3.x
     local ip
-    ip=$(ifconfig 2>/dev/null | grep "inet " | grep "10\.0\.3\." | awk '{print $2}' | head -1)
+    ip=$(echo "$all_ips" | grep "10\.0\.3\." | head -1)
     if [ -z "$ip" ]; then
-        ip=$(ifconfig 2>/dev/null | grep "inet " | grep -v "127\.0\.0\.1" | awk '{print $2}' | head -1)
+        ip=$(echo "$all_ips" | grep -v "127\.0\.0\.1" | head -1)
     fi
     echo "${ip:-127.0.0.1}"
 }
