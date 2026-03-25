@@ -159,6 +159,11 @@ if ! kill -0 $STREAMLIT_PID 2>/dev/null; then
     exit 1
 fi
 
+# ── Open firewall port on Linux ──
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    sudo ufw allow "$PORT" > /dev/null 2>&1
+fi
+
 # ── Start agent in background ──
 "$PYTHON" "$AGENT_HOME/agent.py" --project-dir "$PROJECT_DIR" start > /dev/null 2>&1 &
 

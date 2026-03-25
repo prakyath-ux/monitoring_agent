@@ -360,9 +360,17 @@ def main():
 
     # Step 8: Register as OS service
     if not register_service(current_os, project_path):
-        logging.warning("Service registration failed. Agent will need manul start.")
+        logging.warning("Service registration failed. Agent will need manual start.")
 
-    # step 10: Summary
+    # Step 9: Open firewall port on Linux
+    if current_os == "linux":
+        try:
+            subprocess.run(["sudo", "ufw", "allow", "8501"], capture_output=True, timeout=10)
+            logging.info("Firewall port 8501 opened.")
+        except Exception:
+            logging.warning("Could not open firewall port 8501. Run: sudo ufw allow 8501")
+
+    # Step 10: Summary
     logging.info("=" * 50)
     logging.info("Setup Complete!")
     logging.info(f" OS:         {current_os}")
