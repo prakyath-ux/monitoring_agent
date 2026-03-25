@@ -10,6 +10,7 @@ import signal
 import argparse
 import threading
 import platform
+import subprocess
 
 IS_WINDOWS = platform.system() == "Windows"
 
@@ -999,7 +1000,14 @@ def cmd_start():
                             observer.stop()
                             branch_watcher.stop()
                             Path(PID_FILE).unlink(missing_ok=True)
-                            os.execv(sys.executable, [sys.executable] + sys.argv)
+                            if IS_WINDOWS:
+                                subprocess.Popen(
+                                    [sys.executable] + sys.argv,
+                                    creationflags=subprocess.CREATE_NO_WINDOW
+                                )
+                                sys.exit(0)
+                            else:
+                                os.execv(sys.executable, [sys.executable] + sys.argv)
                     except Exception:
                         pass
     except KeyboardInterrupt:
