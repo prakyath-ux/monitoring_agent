@@ -975,10 +975,33 @@ def cmd_start():
     branch_watcher.start()
     print(f"Agent started. Watching: {os.getcwd()}")
     print("Press Ctrl+C to stop.")
-    
+
+    # Periodic auto-pull and self-restart every 4 hours
+    last_pull = time.time()
+    pull_interval = 4 * 60 * 60  # 4 hours
+
     try:
         while True:
             time.sleep(1)
+            if time.time() - last_pull >= pull_interval:
+                last_pull = time.time()
+                agent_home = Path(__file__).resolve().parent
+                if (agent_home / ".git").exists():
+                    try:
+                        result = subprocess.run(
+                            ["git", "-C", str(agent_home), "pull", "origin", "version2"],
+                            capture_output=True, text=True, timeout=30,
+                            creationflags=subprocess.CREATE_NO_WINDOW if IS_WINDOWS else 0
+                        )
+                        # If new code was pulled, restart the agent
+                        if result.returncode == 0 and "Already up to date" not in result.stdout:
+                            print("New code detected. Restarting agent...")
+                            observer.stop()
+                            branch_watcher.stop()
+                            Path(PID_FILE).unlink(missing_ok=True)
+                            os.execv(sys.executable, [sys.executable] + sys.argv)
+                    except Exception:
+                        pass
     except KeyboardInterrupt:
         shutdown(None, None)
 
