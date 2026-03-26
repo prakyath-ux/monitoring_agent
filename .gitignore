@@ -37,3 +37,4 @@ version2/extension/package-lock.json
 
 # SonarQube rule data (fetched locally, not tracked)
 sonar_rules/
+version2/jetbrains-plugin/
