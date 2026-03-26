@@ -855,10 +855,11 @@ def cmd_init():
             "node_modules/",
             ".git/",
             "__pycache__/",
-            ".agent/logs/",
+            ".agent/",
             "*.pyc",
             ".env",
-            "*.log"
+            "*.log",
+            "venv/"
         ]
         with open(IGNORE_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_ignore, f, default_flow_style=False)
@@ -994,6 +995,29 @@ def cmd_start():
                             capture_output=True, text=True, timeout=30,
                             creationflags=subprocess.CREATE_NO_WINDOW if IS_WINDOWS else 0
                         )
+                        # One-time fix: ensure .agent/ is in ignore.yaml (remove after 2026-04-01)
+                        # One-time fix: ensure essential patterns in ignore.yaml (remove after 2026-04-01)
+                        try:
+                            ignore_file = Path(IGNORE_FILE)
+                            if ignore_file.exists():
+                                ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
+                                required = [".agent/", "node_modules/", "venv/", ".venv/", ".git/", "__pycache__/"]
+                                changed = False
+                                for pattern in required:
+                                    if pattern not in ignore_data:
+                                        ignore_data.append(pattern)
+                                        changed = True
+                                # Remove old partial .agent entries
+                                old_agent = [p for p in ignore_data if p.startswith(".agent/") and p != ".agent/"]
+                                if old_agent:
+                                    ignore_data = [p for p in ignore_data if p not in old_agent]
+                                    changed = True
+                                if changed:
+                                    with open(str(ignore_file), "w", encoding="utf-8") as f:
+                                        yaml.dump(ignore_data, f, default_flow_style=False)
+                        except Exception:
+                            pass
+
                         # If new code was pulled, restart the agent
                         if result.returncode == 0 and "Already up to date" not in result.stdout:
                             print("New code detected. Restarting agent...")
