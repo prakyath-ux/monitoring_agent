@@ -47,9 +47,57 @@ def find_free_port(start=8501):
 
 def get_local_ip():
     fallback = "127.0.0.1"
+
+    # Method 1: UDP connect trick — most reliable cross-platform
     try:
-        import socket as sock
-        for info in sock.getaddrinfo(sock.gethostname(), None, sock.AF_INET):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.0.3.55", 5000))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+
+    # Method 2: Parse subprocess output (Linux/Mac)
+    try:
+        if not IS_WINDOWS:
+            result = subprocess.run(
+                ["ip", "-4", "addr", "show"], capture_output=True, text=True, timeout=5
+            )
+            if result.returncode != 0:
+                result = subprocess.run(
+                    ["ifconfig"], capture_output=True, text=True, timeout=5
+                )
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if "inet " in line:
+                    parts = line.split()
+                    idx = parts.index("inet") + 1 if "inet" in parts else -1
+                    if idx > 0:
+                        ip = parts[idx].split("/")[0]
+                        if ip.startswith("10.0.3."):
+                            return ip
+                        if fallback == "127.0.0.1" and not ip.startswith("127."):
+                            fallback = ip
+        else:
+            result = subprocess.run(
+                ["ipconfig"], capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            for line in result.stdout.splitlines():
+                if "IPv4" in line and ":" in line:
+                    ip = line.split(":")[-1].strip()
+                    if ip.startswith("10.0.3."):
+                        return ip
+                    if fallback == "127.0.0.1" and not ip.startswith("127."):
+                        fallback = ip
+    except Exception:
+        pass
+
+    # Method 3: getaddrinfo fallback
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
             if ip.startswith("10.0.3."):
                 return ip
@@ -57,6 +105,7 @@ def get_local_ip():
                 fallback = ip
     except Exception:
         pass
+
     return fallback
 
 
