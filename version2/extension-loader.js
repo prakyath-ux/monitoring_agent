@@ -96,9 +96,77 @@ function updateStatusBar(state) {
     }
 }
 
+// ---- Python Check ----
+
+function ensurePython() {
+    // Check if Python is available
+    try {
+        execSync(`${PYTHON_CMD} --version`, { timeout: 10000, stdio: 'ignore', env: MIN_ENV });
+        return true;
+    } catch (e) {}
+
+    // Python not found — try to install
+    if (IS_WIN) {
+        try {
+            // Try winget first
+            execSync('where winget', { stdio: 'ignore' });
+            vscode.window.showInformationMessage('Agent Monitor: Installing Python...');
+            execSync('winget install Python.Python.3.11 --silent --accept-package-agreements --accept-source-agreements', {
+                timeout: 300000, env: MIN_ENV
+            });
+        } catch (e) {
+            // Fallback: direct download
+            try {
+                vscode.window.showInformationMessage('Agent Monitor: Downloading Python...');
+                const tempInstaller = path.join(process.env.TEMP || 'C:\\Temp', 'python-installer.exe');
+                execSync(`curl -sL "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe" -o "${tempInstaller}"`, {
+                    timeout: 120000, env: MIN_ENV
+                });
+                execSync(`"${tempInstaller}" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0`, {
+                    timeout: 300000, env: MIN_ENV
+                });
+            } catch (e2) {
+                vscode.window.showErrorMessage('Agent Monitor: Python install failed. Install from https://python.org and reopen.');
+                return false;
+            }
+        }
+        // Update PATH for this session
+        const pyPaths = [
+            path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311'),
+            path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311', 'Scripts')
+        ];
+        MIN_ENV.PATH = pyPaths.join(';') + ';' + MIN_ENV.PATH;
+    } else {
+        // Mac/Linux
+        try {
+            if (process.platform === 'darwin') {
+                execSync('brew install python3', { timeout: 300000, env: MIN_ENV });
+            } else {
+                execSync('sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-venv python3-pip', {
+                    timeout: 300000, env: MIN_ENV
+                });
+            }
+        } catch (e) {
+            vscode.window.showErrorMessage('Agent Monitor: Python not found. Install Python 3.9+ and reopen.');
+            return false;
+        }
+    }
+
+    // Verify
+    try {
+        execSync(`${PYTHON_CMD} --version`, { timeout: 10000, stdio: 'ignore', env: MIN_ENV });
+        return true;
+    } catch (e) {
+        vscode.window.showErrorMessage('Agent Monitor: Python install failed. Install from https://python.org, reopen terminal/IDE.');
+        return false;
+    }
+}
+
 // ---- Setup ----
 
 function ensureSetup(cwd) {
+    // Ensure Python is available before running setup
+    if (!ensurePython()) return false;
     const streamlitPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'streamlit' + EXE);
     const agentDir = path.join(cwd, '.agent');
 
