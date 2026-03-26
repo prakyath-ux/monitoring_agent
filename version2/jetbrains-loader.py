@@ -243,7 +243,7 @@ def stop_agent(project_dir):
             pass
 
     # Stop heartbeat
-    hb_pid_file = Path(project_dir) / ".agent" / ".heartbeat_pid"
+    hb_pid_file = AGENT_HOME / ".heartbeat_pid"
     if hb_pid_file.exists():
         try:
             pid = int(hb_pid_file.read_text(encoding="utf-8").strip())
@@ -286,7 +286,7 @@ def register_with_dashboard(project_dir, port):
 def start_heartbeat(project_dir, port):
     """Start heartbeat as a background process"""
     # Write a small heartbeat script and run it
-    hb_script = Path(project_dir) / ".agent" / ".heartbeat.py"
+    hb_script = AGENT_HOME / ".heartbeat.py"
     hb_script.write_text(f"""
 import time, json, socket, os
 from urllib.request import urlopen, Request
@@ -336,7 +336,7 @@ while True:
 
     try:
         proc = subprocess.Popen([python_path, str(hb_script)], **kwargs)
-        hb_pid_file = Path(project_dir) / ".agent" / ".heartbeat_pid"
+        hb_pid_file = AGENT_HOME / ".heartbeat_pid"
         hb_pid_file.write_text(str(proc.pid), encoding="utf-8")
     except Exception:
         pass
