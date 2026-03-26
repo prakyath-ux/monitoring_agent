@@ -74,10 +74,12 @@ def ensure_setup(project_dir):
 
     system_python = "python" if IS_WINDOWS else "python3"
     try:
+        kwargs = {"timeout": 300}
+        if IS_WINDOWS:
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             [system_python, str(setup_py), project_dir],
-            timeout=300,
-            creationflags=subprocess.CREATE_NO_WINDOW if IS_WINDOWS else 0
+            **kwargs
         )
         return result.returncode == 0
     except Exception as e:
