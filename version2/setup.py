@@ -258,7 +258,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart={python_path} {agent_script} --project-dir {project_path} start
+ExecStart={python_path} {agent_script} --project-dir "{project_path}" start
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:{AGENT_HOME}/service.log
@@ -282,7 +282,7 @@ def register_service_windows(project_path):
 
     cmd = (
         f'schtasks /create /tn "{task_name}" /tr '
-        f'"{python_path} {agent_script} --project-dir {project_path} start" '
+        f'"\"{python_path}\" \"{agent_script}\" --project-dir \"{project_path}\" start" '
         f'/sc onlogon /rl limited /f'
     )
     try:
