@@ -115,15 +115,39 @@ def clone_repo():
 
 def create_venv():
     venv_path = AGENT_HOME / "venv"
+    pip_path = venv_path / ("Scripts" / "pip.exe" if detect_os() == "windows" else "bin" / Path("pip"))
+
+    # If venv exists but pip is missing, delete and recreate
+    if venv_path.exists() and not pip_path.exists():
+        logging.warning("Broken venv (no pip). Recreating...")
+        import shutil
+        shutil.rmtree(str(venv_path), ignore_errors=True)
+
     if venv_path.exists():
         logging.info("Virtual environment already exists.")
         return True
-    
+
+    # On Linux, ensure python3-venv and python3-pip are installed
+    if detect_os() == "linux":
+        try:
+            subprocess.run(
+                ["sudo", "apt-get", "install", "-y", "-qq", "python3-venv", "python3-pip"],
+                capture_output=True, timeout=60
+            )
+        except Exception:
+            pass
+
     logging.info("Creating Virtual Environment...")
     try:
         subprocess.run(
             [sys.executable, "-m", "venv", str(venv_path)],
-            check=True, timeout=60 
+            check=True, timeout=60
+        )
+        # Ensure pip is available in the venv
+        python_in_venv = str(venv_path / ("Scripts" / "python.exe" if detect_os() == "windows" else "bin" / Path("python")))
+        subprocess.run(
+            [python_in_venv, "-m", "ensurepip", "--upgrade"],
+            capture_output=True, timeout=60
         )
         logging.info("Virtual Environment Created.")
         return True
