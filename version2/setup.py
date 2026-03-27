@@ -115,7 +115,10 @@ def clone_repo():
 
 def create_venv():
     venv_path = AGENT_HOME / "venv"
-    pip_path = venv_path / ("Scripts" / "pip.exe" if detect_os() == "windows" else "bin" / Path("pip"))
+    if detect_os() == "windows":
+        pip_path = venv_path / "Scripts" / "pip.exe"
+    else:
+        pip_path = venv_path / "bin" / "pip"
 
     # If venv exists but pip is missing, delete and recreate
     if venv_path.exists() and not pip_path.exists():
@@ -144,7 +147,10 @@ def create_venv():
             check=True, timeout=60
         )
         # Ensure pip is available in the venv
-        python_in_venv = str(venv_path / ("Scripts" / "python.exe" if detect_os() == "windows" else "bin" / Path("python")))
+        if detect_os() == "windows":
+            python_in_venv = str(venv_path / "Scripts" / "python.exe")
+        else:
+            python_in_venv = str(venv_path / "bin" / "python")
         subprocess.run(
             [python_in_venv, "-m", "ensurepip", "--upgrade"],
             capture_output=True, timeout=60
