@@ -266,7 +266,8 @@ async function launchStreamlit(cwd) {
         registerWithDashboard(projectName, port);
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
-            registerWithDashboard(projectName, port);
+            const ip = getLocalIP();
+            if (ip !== '127.0.0.1') registerWithDashboard(projectName, port);
         }, 60000);
     }, 8000);
 

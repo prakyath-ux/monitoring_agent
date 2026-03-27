@@ -309,6 +309,7 @@ def get_local_ip():
 
 def register():
     ip = get_local_ip()
+    if ip == "127.0.0.1": return  # Heartbeat skip — don't overwrite good IP
     dev_name = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
     machine = socket.gethostname()
     project_name = os.path.basename(project_dir)
