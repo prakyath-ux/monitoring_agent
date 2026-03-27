@@ -159,9 +159,9 @@ if ! kill -0 $STREAMLIT_PID 2>/dev/null; then
     exit 1
 fi
 
-# ── Open firewall port on Linux ──
+# ── Open firewall ports on Linux (range for multiple projects) ──
 if [[ "$OSTYPE" != "darwin"* ]]; then
-    sudo ufw allow "$PORT" > /dev/null 2>&1
+    sudo ufw allow 8501:8510/tcp > /dev/null 2>&1
 fi
 
 # ── Start agent in background ──
