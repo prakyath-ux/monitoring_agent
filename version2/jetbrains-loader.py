@@ -299,11 +299,26 @@ server_port = {DASHBOARD_PORT}
 
 def get_local_ip():
     fallback = "127.0.0.1"
+    import subprocess as sp
     try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            if ip.startswith("10.0.3."): return ip
-            if fallback == "127.0.0.1" and not ip.startswith("127."): fallback = ip
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("{DASHBOARD_SERVER}", {DASHBOARD_PORT}))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."): return ip
+    except: pass
+    try:
+        r = sp.run(["ip", "-4", "addr", "show"], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            r = sp.run(["ifconfig"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            if "inet " in line:
+                parts = line.strip().split()
+                idx = parts.index("inet") + 1 if "inet" in parts else -1
+                if idx > 0:
+                    ip = parts[idx].split("/")[0]
+                    if ip.startswith("10.0.3."): return ip
+                    if fallback == "127.0.0.1" and not ip.startswith("127."): fallback = ip
     except: pass
     return fallback
 
