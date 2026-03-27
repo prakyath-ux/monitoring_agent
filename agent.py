@@ -969,7 +969,13 @@ def cmd_start():
     log_writer = LogWriter()
     
     event_handler = FileEventHandler(log_writer, config, ignore_patterns)
-    observer = Observer()
+    # Use PollingObserver on WSL (native file events don't work across WSL boundary)
+    is_wsl = os.path.exists("/proc/version") and "microsoft" in open("/proc/version", encoding="utf-8").read().lower()
+    if is_wsl:
+        from watchdog.observers.polling import PollingObserver
+        observer = PollingObserver(timeout=3)
+    else:
+        observer = Observer()
     observer.schedule(event_handler, PROJECT_DIR, recursive=True)
 
     # Start branch watcher
