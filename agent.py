@@ -919,6 +919,24 @@ def cmd_init():
         with open(RULES_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_rules, f, default_flow_style=False, sort_keys=False)
 
+    # Ensure .agent/ is in project's .gitignore
+    add_agent_to_gitignore()
+
+
+def add_agent_to_gitignore():
+    """Add .agent/ to project's .gitignore if missing"""
+    try:
+        gitignore_path = Path(PROJECT_DIR) / ".gitignore"
+        if gitignore_path.exists():
+            content = gitignore_path.read_text(encoding="utf-8")
+            if ".agent/" not in content and ".agent" not in content.splitlines():
+                with open(str(gitignore_path), "a", encoding="utf-8") as f:
+                    f.write("\n# Agent Monitor\n.agent/\n")
+        else:
+            gitignore_path.write_text("# Agent Monitor\n.agent/\n", encoding="utf-8")
+    except Exception:
+        pass
+
 
 def cmd_start():
     """Start the file watcher in background"""
@@ -1015,6 +1033,12 @@ def cmd_start():
                                 if changed:
                                     with open(str(ignore_file), "w", encoding="utf-8") as f:
                                         yaml.dump(ignore_data, f, default_flow_style=False)
+                        except Exception:
+                            pass
+
+                        # One-time fix: ensure .agent/ in project .gitignore (remove after 2026-04-01)
+                        try:
+                            add_agent_to_gitignore()
                         except Exception:
                             pass
 
