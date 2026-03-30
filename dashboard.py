@@ -27,8 +27,27 @@ AGENT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents.js
 API_PORT = 5000
 
 # ------ Authentication ---------#
-DASHBOARD_USER = "dashboard"
-DASHBOARD_PASS = "access123"
+DASHBOARD_USERS = {
+    "frontend": "access123",
+    "backend": "access123",
+    "mobile": "access123",
+    "AI": "access123",
+    "development": "access123",
+}
+
+LOGIN_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "login_log.json")
+
+def log_login(username):
+    logs = []
+    if os.path.exists(LOGIN_LOG):
+        with open(LOGIN_LOG, "r") as f:
+            logs = json.load(f)
+    logs.append({
+        "user": username,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    with open(LOGIN_LOG, "w") as f:
+        json.dump(logs[-100:], f, indent=2)
 
 def check_login():
     if "authenticated" not in st.session_state:
@@ -41,8 +60,10 @@ def check_login():
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             if st.button("Login", use_container_width=True):
-                if username == DASHBOARD_USER and password == DASHBOARD_PASS:
+                if username in DASHBOARD_USERS and password == DASHBOARD_USERS[username]:
                     st.session_state.authenticated = True
+                    st.session_state.logged_in_user = username
+                    log_login(username)
                     st.rerun()
                 else:
                     st.error("Invalid credentials")
