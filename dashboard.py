@@ -26,6 +26,30 @@ st.set_page_config(
 AGENT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents.json")
 API_PORT = 5000
 
+# ------ Authentication ---------#
+DASHBOARD_USER = "dashboard"
+DASHBOARD_PASS = "access123"
+
+def check_login():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if not st.session_state.authenticated:
+        st.markdown("<h2 style='text-align:center;'>RepoAgent Central Monitor</h2>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            if st.button("Login", use_container_width=True):
+                if username == DASHBOARD_USER and password == DASHBOARD_PASS:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
+        st.stop()
+
+check_login()
+
 # ------ helper Functions---------#
 def load_agents():
     """Load registered agents from local JSON file"""
@@ -340,7 +364,7 @@ if agents:
 
     # ── Auto Refresh ──
     st.markdown("---")
-    auto_refresh = st.checkbox("Auto-refresh every 30 seconds", value=True)
+    auto_refresh = st.checkbox("Auto-refresh every 30 seconds", value=False)
     if auto_refresh:
         time.sleep(30)
         st.rerun()
