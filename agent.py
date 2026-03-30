@@ -938,8 +938,47 @@ def add_agent_to_gitignore():
         pass
 
 
+def ensure_agent_files():
+    """Self-heal: recreate missing config files if .agent/ exists"""
+    if not Path(AGENT_DIR).exists():
+        return
+    if not Path(CONFIG_FILE).exists():
+        default_config = {
+            "watch_extensions": [".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".kts",
+                                 ".go", ".json", ".xml", ".yaml", ".yml", ".properties",
+                                 ".gradle", ".sql", ".html", ".css", ".scss"],
+            "model": "gpt-4o",
+            "log_retention_days": 30
+        }
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(default_config, f, default_flow_style=False)
+    if not Path(RULES_FILE).exists():
+        default_rules = {
+            "rules": {
+                "max_function_lines": 60,
+                "max_file_lines": 800,
+                "forbidden_imports": [],
+                "forbidden_files": [],
+                "forbidden_patterns": [
+                    {"pattern": "password\\s*=\\s*['\"]", "message": "Hardcoded password detected"},
+                    {"pattern": "api_key\\s*=\\s*['\"]", "message": "Hardcoded API key detected"},
+                    {"pattern": "secret\\s*=\\s*['\"]", "message": "Hardcoded secret detected"}
+                ]
+            }
+        }
+        with open(RULES_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(default_rules, f, default_flow_style=False, sort_keys=False)
+    if not Path(PURPOSE_FILE).exists():
+        Path(PURPOSE_FILE).write_text("# Repository Purpose\n\n## Mission\n[What is this project?]\n\n## Direction\n[Where is this project heading?]\n", encoding="utf-8")
+    if not Path(STANDARDS_FILE).exists():
+        Path(STANDARDS_FILE).write_text("# Company Coding Standards\n\n## Best Practices\n- Add error handling for all async operations\n- Write docstrings for public functions\n- Keep functions under 50 lines\n", encoding="utf-8")
+
+
 def cmd_start():
     """Start the file watcher in background"""
+    # Self-heal missing config files
+    ensure_agent_files()
+
     # Auto-pull latest code (works for all startup methods: extension, script, OS service)
     agent_home = Path(__file__).resolve().parent
     if (agent_home / ".git").exists():
