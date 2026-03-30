@@ -1043,7 +1043,7 @@ def cmd_start():
 
     # Periodic auto-pull and self-restart every 4 hours
     last_pull = time.time()
-    pull_interval = 4 * 60 * 60  # 4 hours
+    pull_interval = 5 * 60  # 5 minutes
 
     try:
         while True:
