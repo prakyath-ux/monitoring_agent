@@ -54,8 +54,12 @@ PROJECT_DIR = os.environ.get("AGENT_PROJECT_DIR", os.getcwd())
 
 # Load .env — check ~/.agent-monitor/.env first (shared key), then project dir
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.expanduser("~"), '.agent-monitor', '.env'))
-load_dotenv(os.path.join(PROJECT_DIR, '.env'))
+_agent_env = os.path.join(os.path.expanduser("~"), '.agent-monitor', '.env')
+_project_env = os.path.join(PROJECT_DIR, '.env')
+if os.path.exists(_agent_env):
+    load_dotenv(_agent_env, override=True)
+if os.path.exists(_project_env):
+    load_dotenv(_project_env, override=True)
 
 AGENT_DIR = os.path.join(PROJECT_DIR, ".agent")
 LOGS_DIR = os.path.join(AGENT_DIR, "logs")
