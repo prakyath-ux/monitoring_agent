@@ -109,12 +109,28 @@ def get_local_ip():
     return fallback
 
 
+def fetch_env_keys():
+    """Fetch .env from central dashboard and save to ~/.agent-monitor/.env"""
+    env_file = AGENT_HOME / ".env"
+    if env_file.exists():
+        return  # Already have keys
+    try:
+        req = Request(f"http://{DASHBOARD_SERVER}:{DASHBOARD_PORT}/env", method="GET")
+        response = urlopen(req, timeout=5)
+        content = response.read().decode("utf-8")
+        if content and "OPENAI_API_KEY" in content:
+            env_file.write_text(content, encoding="utf-8")
+    except Exception:
+        pass
+
+
 def ensure_setup(project_dir):
     python_path = get_python_path()
     agent_dir = Path(project_dir) / ".agent"
     setup_py = AGENT_HOME / "version2" / "setup.py"
 
     if Path(python_path).exists() and agent_dir.exists():
+        fetch_env_keys()
         return True
 
     if not setup_py.exists():

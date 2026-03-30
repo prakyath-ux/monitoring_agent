@@ -79,6 +79,22 @@ class RegisterHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
+        # Serve .env keys at /env path
+        if self.path == "/env":
+            env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+            if os.path.exists(env_file):
+                with open(env_file, "r") as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(content.encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"No .env found")
+            return
+
         agents = load_agents()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -295,14 +311,14 @@ if agents:
             return 2
     results.sort(key=sort_key)
 
-    # Group by developer
+    # Group by machine (dev_name + machine combo to avoid merging different devs with same username)
     from collections import OrderedDict
     grouped = OrderedDict()
     for r in results:
-        dev = r["developer"]
-        if dev not in grouped:
-            grouped[dev] = []
-        grouped[dev].append(r)
+        key = f"{r['developer']}|{r['machine']}|{r['ip']}"
+        if key not in grouped:
+            grouped[key] = []
+        grouped[key].append(r)
 
     # Column headers
     h_dev, h_proj, h_machine, h_ip, h_ping, h_agent, h_link = st.columns([2, 2, 2, 2, 2, 2, 1])
@@ -322,7 +338,7 @@ if agents:
         st.markdown("**Link**")
     st.markdown("---")
 
-    for dev_name, dev_results in grouped.items():
+    for group_key, dev_results in grouped.items():
       for idx, r in enumerate(dev_results):
         col_dev, col_proj, col_machine, col_ip, col_ping, col_agent, col_link = st.columns([2, 2, 2, 2, 2, 2, 1])
 

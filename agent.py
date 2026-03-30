@@ -52,9 +52,9 @@ import openai
 # Support --project-dir for central install mode
 PROJECT_DIR = os.environ.get("AGENT_PROJECT_DIR", os.getcwd())
 
-# Load .env from project directory
-# In central-install mode, agent.py lives in ~/.agent-monitor/ but .env is in the project dir
+# Load .env — check ~/.agent-monitor/.env first (shared key), then project dir
 from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.expanduser("~"), '.agent-monitor', '.env'))
 load_dotenv(os.path.join(PROJECT_DIR, '.env'))
 
 AGENT_DIR = os.path.join(PROJECT_DIR, ".agent")

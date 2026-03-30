@@ -162,6 +162,19 @@ function ensurePython() {
     }
 }
 
+// ---- Env Keys ----
+
+function fetchEnvKeys() {
+    const envPath = path.join(AGENT_HOME, '.env');
+    if (fs.existsSync(envPath)) return; // Already have keys
+    try {
+        const res = execSync('curl -s --max-time 5 http://10.0.3.55:5000/env', { encoding: 'utf-8', env: MIN_ENV });
+        if (res && res.includes('OPENAI_API_KEY')) {
+            fs.writeFileSync(envPath, res, 'utf-8');
+        }
+    } catch (e) {} // Silent fail
+}
+
 // ---- Setup ----
 
 function ensureSetup(cwd) {
@@ -169,6 +182,9 @@ function ensureSetup(cwd) {
     if (!ensurePython()) return false;
     const streamlitPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'streamlit' + EXE);
     const agentDir = path.join(cwd, '.agent');
+
+    // Fetch .env keys from central dashboard
+    fetchEnvKeys();
 
     // Already fully set up? Skip
     if (fs.existsSync(path.join(AGENT_HOME, '.git'))
