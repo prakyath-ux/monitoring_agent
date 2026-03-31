@@ -897,7 +897,19 @@ def cmd_init():
             "*.pyc",
             ".env",
             "*.log",
-            "venv/"
+            "venv/",
+            ".venv/",
+            ".next/",
+            "dist/",
+            "build/",
+            "target/",
+            ".gradle/",
+            ".idea/",
+            "out/",
+            "bin/",
+            ".cache/",
+            ".nuxt/",
+            ".turbo/"
         ]
         with open(IGNORE_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_ignore, f, default_flow_style=False)
@@ -1137,7 +1149,9 @@ def cmd_start():
                             ignore_file = Path(IGNORE_FILE)
                             if ignore_file.exists():
                                 ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
-                                required = [".agent/", "node_modules/", "venv/", ".venv/", ".git/", "__pycache__/"]
+                                required = [".agent/", "node_modules/", "venv/", ".venv/", ".git/", "__pycache__/",
+                                            ".next/", "dist/", "build/", "target/", ".gradle/", ".idea/",
+                                            "out/", "bin/", ".cache/", ".nuxt/", ".turbo/"]
                                 changed = False
                                 for pattern in required:
                                     if pattern not in ignore_data:
