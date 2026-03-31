@@ -978,10 +978,38 @@ def ensure_agent_files():
         Path(STANDARDS_FILE).write_text("# Company Coding Standards\n\n## Best Practices\n- Add error handling for all async operations\n- Write docstrings for public functions\n- Keep functions under 50 lines\n", encoding="utf-8")
 
 
+def start_system_heartbeat():
+    """Start system-level heartbeat if not already running"""
+    agent_home = Path(__file__).resolve().parent
+    pid_file = agent_home / ".system_heartbeat_pid"
+    heartbeat_script = agent_home / "scripts" / "heartbeat.py"
+    if not heartbeat_script.exists():
+        return
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text(encoding="utf-8").strip())
+            if is_pid_alive(pid):
+                return
+        except Exception:
+            pass
+    try:
+        kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL}
+        if IS_WINDOWS:
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        python_path = agent_home / "venv" / ("Scripts" if IS_WINDOWS else "bin") / ("python.exe" if IS_WINDOWS else "python")
+        proc = subprocess.Popen([str(python_path), str(heartbeat_script)], **kwargs)
+        pid_file.write_text(str(proc.pid), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def cmd_start():
     """Start the file watcher in background"""
     # Self-heal missing config files
     ensure_agent_files()
+
+    # Start system heartbeat (independent of IDE)
+    start_system_heartbeat()
 
     # Auto-pull latest code (works for all startup methods: extension, script, OS service)
     agent_home = Path(__file__).resolve().parent
