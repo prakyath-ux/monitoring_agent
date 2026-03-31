@@ -373,18 +373,13 @@ async function startAgent() {
         return;
     }
 
-    if (fs.existsSync(path.join(cwd, '.agent'))) {
-        if (!ensureSetup(cwd)) return;
-        launchStreamlit(cwd);
-        return;
-    }
+    // Auto-initialize if it looks like a real project (has .git or package.json or pom.xml etc.)
+    const projectIndicators = ['.git', 'package.json', 'pom.xml', 'build.gradle', 'requirements.txt',
+        'Cargo.toml', 'go.mod', 'setup.py', 'Makefile', 'CMakeLists.txt', '.project', 'pubspec.yaml'];
+    const isProject = fs.existsSync(path.join(cwd, '.agent')) ||
+        projectIndicators.some(f => fs.existsSync(path.join(cwd, f)));
 
-    const choice = await vscode.window.showInformationMessage(
-        'Agent Monitor: Initialize monitoring for this project?',
-        'Yes', 'No'
-    );
-
-    if (choice !== 'Yes') {
+    if (!isProject) {
         updateStatusBar('stopped');
         return;
     }

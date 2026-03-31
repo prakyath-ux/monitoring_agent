@@ -962,18 +962,20 @@ def cmd_init():
 
 
 def add_agent_to_gitignore():
-    """Add .agent/ to project's .gitignore if missing"""
-    try:
-        gitignore_path = Path(PROJECT_DIR) / ".gitignore"
-        if gitignore_path.exists():
-            content = gitignore_path.read_text(encoding="utf-8")
-            if ".agent/" not in content and ".agent" not in content.splitlines():
-                with open(str(gitignore_path), "a", encoding="utf-8") as f:
-                    f.write("\n# Agent Monitor\n.agent/\n")
-        else:
-            gitignore_path.write_text("# Agent Monitor\n.agent/\n", encoding="utf-8")
-    except Exception:
-        pass
+    """Add .agent/ to project's .gitignore and .dockerignore if missing"""
+    for ignore_file in [".gitignore", ".dockerignore"]:
+        try:
+            ignore_path = Path(PROJECT_DIR) / ignore_file
+            if ignore_path.exists():
+                content = ignore_path.read_text(encoding="utf-8")
+                if ".agent/" not in content and ".agent" not in content.splitlines():
+                    with open(str(ignore_path), "a", encoding="utf-8") as f:
+                        f.write("\n# Agent Monitor\n.agent/\n")
+            elif ignore_file == ".gitignore":
+                # Only create .gitignore if missing, don't create .dockerignore
+                ignore_path.write_text("# Agent Monitor\n.agent/\n", encoding="utf-8")
+        except Exception:
+            pass
 
 
 def ensure_agent_files():
