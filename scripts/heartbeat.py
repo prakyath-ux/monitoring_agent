@@ -127,43 +127,6 @@ def register_project(project_dir, ip):
         pass
 
 
-def scan_for_projects():
-    """Scan common directories for projects with .agent/ folder"""
-    projects = []
-    home = os.path.expanduser("~")
-    search_dirs = [
-        home,
-        os.path.join(home, "Documents"),
-        os.path.join(home, "Projects"),
-        os.path.join(home, "Desktop"),
-        os.path.join(home, "Downloads"),
-    ]
-    if IS_WINDOWS:
-        for drive in ["C:", "D:", "E:"]:
-            if os.path.exists(drive + "\\"):
-                search_dirs.append(drive + "\\")
-
-    for search_dir in search_dirs:
-        if not os.path.exists(search_dir):
-            continue
-        try:
-            for entry in os.scandir(search_dir):
-                if entry.is_dir() and os.path.exists(os.path.join(entry.path, ".agent")):
-                    projects.append(entry.path)
-        except PermissionError:
-            continue
-
-    # Save discovered projects
-    agents_json = os.path.join(AGENT_HOME, ".registered_projects.json")
-    try:
-        with open(agents_json, "w", encoding="utf-8") as f:
-            json.dump(projects, f, indent=2)
-    except Exception:
-        pass
-
-    return projects
-
-
 def heartbeat_loop():
     while True:
         ip = get_local_ip()
@@ -172,8 +135,6 @@ def heartbeat_loop():
             continue
 
         projects = get_registered_projects()
-        if not projects:
-            projects = scan_for_projects()
 
         for project_dir in projects:
             if os.path.exists(os.path.join(project_dir, ".agent")):
