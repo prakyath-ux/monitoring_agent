@@ -979,19 +979,24 @@ def ensure_agent_files():
 
 
 def start_system_heartbeat():
-    """Start system-level heartbeat if not already running"""
+    """Start system-level heartbeat, kill old one first to ensure latest code"""
     agent_home = Path(__file__).resolve().parent
     pid_file = agent_home / ".system_heartbeat_pid"
     heartbeat_script = agent_home / "scripts" / "heartbeat.py"
     if not heartbeat_script.exists():
         return
+    # Kill old heartbeat to ensure it runs latest code
     if pid_file.exists():
         try:
             pid = int(pid_file.read_text(encoding="utf-8").strip())
-            if is_pid_alive(pid):
-                return
+            if IS_WINDOWS:
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                               capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                os.kill(pid, 9)
         except Exception:
             pass
+        pid_file.unlink(missing_ok=True)
     try:
         kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL}
         if IS_WINDOWS:
