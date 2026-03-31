@@ -88,6 +88,17 @@ class RegisterHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length))
+
+        # Reject junk project names
+        blocked = ['.agent-monitor', '.Trash', '.trash', 'untitled', 'pycharm_agent_test',
+                   'test-project_port_collision', '.agent']
+        project_name = body.get("project_name", "")
+        if project_name in blocked or project_name.startswith("."):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"SKIP")
+            return
+
         agents = load_agents()
         # Deduplicate by dev_name + project_name
         key = (body.get("dev_name", "").lower(), body.get("project_name", "").lower())
