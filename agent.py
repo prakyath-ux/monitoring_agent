@@ -890,26 +890,18 @@ def cmd_init():
     # Create default ignore.yaml
     if not Path(IGNORE_FILE).exists():
         default_ignore = [
-            "node_modules/",
-            ".git/",
-            "__pycache__/",
-            ".agent/",
-            "*.pyc",
-            ".env",
-            "*.log",
-            "venv/",
-            ".venv/",
-            ".next/",
-            "dist/",
-            "build/",
-            "target/",
-            ".gradle/",
-            ".idea/",
-            "out/",
-            "bin/",
-            ".cache/",
-            ".nuxt/",
-            ".turbo/"
+            "node_modules/", ".git/", "__pycache__/", ".agent/",
+            "*.pyc", ".env", "*.log",
+            "venv/", ".venv/",
+            ".next/", "dist/", "build/", "target/",
+            ".gradle/", ".idea/", ".vscode/",
+            "out/", "bin/", ".cache/", ".nuxt/", ".turbo/",
+            "coverage/", ".nyc_output/", ".pytest_cache/", ".mypy_cache/",
+            "*.min.js", "*.map", "*.class", "*.jar", "*.war",
+            ".dart_tool/", ".flutter-plugins", "ios/Pods/",
+            "android/.gradle/", "android/build/", "*.apk", "*.ipa",
+            ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
+            "*.egg-info/", ".tox/", "htmlcov/"
         ]
         with open(IGNORE_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_ignore, f, default_flow_style=False)
@@ -1151,7 +1143,13 @@ def cmd_start():
                                 ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
                                 required = [".agent/", "node_modules/", "venv/", ".venv/", ".git/", "__pycache__/",
                                             ".next/", "dist/", "build/", "target/", ".gradle/", ".idea/",
-                                            "out/", "bin/", ".cache/", ".nuxt/", ".turbo/"]
+                                            "out/", "bin/", ".cache/", ".nuxt/", ".turbo/", ".vscode/",
+                                            "coverage/", ".nyc_output/", ".pytest_cache/", ".mypy_cache/",
+                                            "*.min.js", "*.map", "*.class", "*.jar", "*.war",
+                                            ".dart_tool/", ".flutter-plugins", "ios/Pods/",
+                                            "android/.gradle/", "android/build/", "*.apk", "*.ipa",
+                                            ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
+                                            "*.egg-info/", ".tox/", "htmlcov/"]
                                 changed = False
                                 for pattern in required:
                                     if pattern not in ignore_data:
