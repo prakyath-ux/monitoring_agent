@@ -386,6 +386,9 @@ class FileEventHandler(FileSystemEventHandler):
         self.file_contents = {}
         self._was_paused = False
         self._last_event_time = {}  # path -> timestamp for debounce
+        self._pending_changes = {}  # path -> {"first_change": timestamp, "timer": Timer}
+        self._batch_silence = 30  # seconds of silence before logging
+        self._batch_max_wait = 300  # max 5 minutes before forced log
         self._preload_file_contents()
 
     def _preload_file_contents(self):
@@ -453,8 +456,42 @@ class FileEventHandler(FileSystemEventHandler):
         self.file_contents[path] = content
         self.log_writer.write("FILE_CREATED", path, content=content, branch=get_current_branch())
 
+    def _flush_pending(self, path):
+        """Log the batched changes for a file"""
+        if path not in self._pending_changes:
+            return
+
+        # Remove from pending
+        pending = self._pending_changes.pop(path, None)
+        if pending and pending.get("timer"):
+            pending["timer"].cancel()
+
+        # Get current content from disk vs original cached content
+        new_content = self.get_file_content(path)
+        old_content = pending.get("original_content", "") if pending else ""
+
+        if old_content and new_content:
+            diff = "\n".join(difflib.unified_diff(
+                old_content.splitlines(),
+                new_content.splitlines(),
+                lineterm=""
+            ))
+        else:
+            diff = None
+
+        if not diff:
+            self.file_contents[path] = new_content
+            return
+
+        lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+        source = detect_editor_source(path, lines_added)
+
+        self.file_contents[path] = new_content
+        self.log_writer.write("FILE_MODIFIED", path, diff=diff, source=source, branch=get_current_branch())
+        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {path} (via {source})")
+
     def on_modified(self, event):
-        """ Handle file modification """
+        """ Handle file modification — batches rapid changes """
         if event.is_directory:
             return
         if is_paused():
@@ -466,40 +503,37 @@ class FileEventHandler(FileSystemEventHandler):
         if not self.should_process(path):
             return
 
-        # Debounce: skip if same file was logged within 2 seconds
         now = time.time()
-        last = self._last_event_time.get(path, 0)
-        if now - last < 2.0:
-            return
 
-        new_content = self.get_file_content(path)
-        old_content = self.file_contents.get(path, "")
+        if path in self._pending_changes:
+            # Already tracking this file — reset the silence timer
+            pending = self._pending_changes[path]
+            if pending.get("timer"):
+                pending["timer"].cancel()
 
-        # generate diff
-        if old_content and new_content:
-            diff = "\n".join(difflib.unified_diff(
-                old_content.splitlines(),
-                new_content.splitlines(),
-                lineterm=""
-            ))
+            # Check if max wait exceeded — force log
+            if now - pending["first_change"] >= self._batch_max_wait:
+                self._flush_pending(path)
+                # Start fresh tracking
+                self._pending_changes[path] = {
+                    "first_change": now,
+                    "original_content": self.file_contents.get(path, ""),
+                    "timer": threading.Timer(self._batch_silence, self._flush_pending, args=[path])
+                }
+                self._pending_changes[path]["timer"].start()
+                return
+
+            # Reset silence timer
+            pending["timer"] = threading.Timer(self._batch_silence, self._flush_pending, args=[path])
+            pending["timer"].start()
         else:
-            diff = None
-
-        # Skip if no actual content change (metadata-only event)
-        if not diff:
-            self.file_contents[path] = new_content
-            return
-
-        # Count lines added and detect source
-        lines_added = 0
-        if diff:
-            lines_added = sum(1 for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
-        source = detect_editor_source(path, lines_added)
-
-        self._last_event_time[path] = now
-        self.file_contents[path] = new_content
-        self.log_writer.write("FILE_MODIFIED", path, diff=diff, source=source, branch=get_current_branch())
-        print(f"  [{datetime.now().strftime('%H:%M:%S')}] FILE_MODIFIED: {path} (via {source})")
+            # First change to this file — start tracking
+            self._pending_changes[path] = {
+                "first_change": now,
+                "original_content": self.file_contents.get(path, ""),
+                "timer": threading.Timer(self._batch_silence, self._flush_pending, args=[path])
+            }
+            self._pending_changes[path]["timer"].start()
 
         # Real-time rule checking (silent on success)
         rules_data = load_rules()
