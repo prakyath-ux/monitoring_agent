@@ -929,14 +929,18 @@ elif page == "Reports":
     st.header("Reports")
     st.markdown("---")
 
-    col_btn, col_spacer = st.columns([1, 3])
+    col_from, col_to, col_btn = st.columns([1, 1, 1])
+    with col_from:
+        from_date = st.date_input("From", value=datetime.now().date())
+    with col_to:
+        to_date = st.date_input("To", value=datetime.now().date())
     with col_btn:
-        generate = st.button("Generate New Report", use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        generate = st.button("Generate Report", use_container_width=True)
 
     if generate:
-        today = datetime.now().strftime("%Y-%m-%d")
         with st.spinner("Generating report via OpenAI... This may take a moment."):
-            output = run_agent_command("report", "--from", today)
+            output = run_agent_command("report", "--from", from_date.strftime("%Y-%m-%d"), "--to", to_date.strftime("%Y-%m-%d"))
             st.session_state.report_output = output
 
     if "report_output" in st.session_state:
