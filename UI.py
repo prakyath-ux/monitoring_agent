@@ -228,11 +228,8 @@ def is_agent_running():
         try:
             pid_int = int(pid)
             if sys.platform == "win32":
-                result = subprocess.run(
-                    ["tasklist", "/FI", f"PID eq {pid_int}"],
-                    capture_output=True, text=True, timeout=3
-                )
-                return str(pid_int) in result.stdout
+                # PID file exists + valid PID = agent is running (agent deletes PID on shutdown)
+                return pid_int > 0
             else:
                 os.kill(pid_int, 0)
                 return True
