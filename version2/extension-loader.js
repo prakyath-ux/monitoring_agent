@@ -162,6 +162,50 @@ function ensurePython() {
     }
 }
 
+// ---- System Heartbeat ----
+
+function registerProjectLocally(cwd) {
+    const regFile = path.join(AGENT_HOME, '.registered_projects.json');
+    let projects = [];
+    try {
+        if (fs.existsSync(regFile)) {
+            projects = JSON.parse(fs.readFileSync(regFile, 'utf-8'));
+        }
+    } catch (e) { projects = []; }
+    if (!projects.includes(cwd)) {
+        projects.push(cwd);
+        fs.writeFileSync(regFile, JSON.stringify(projects, null, 2), 'utf-8');
+    }
+}
+
+function startSystemHeartbeat() {
+    const pidFile = path.join(AGENT_HOME, '.system_heartbeat_pid');
+    // Check if already running
+    if (fs.existsSync(pidFile)) {
+        try {
+            const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+            if (IS_WIN) {
+                if (pid > 0) return; // Assume running on Windows
+            } else {
+                process.kill(pid, 0); // Throws if not running
+                return; // Already running
+            }
+        } catch (e) {} // Not running, start it
+    }
+
+    const heartbeatScript = path.join(AGENT_HOME, 'scripts', 'heartbeat.py');
+    if (!fs.existsSync(heartbeatScript)) return;
+
+    const pythonPath = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
+    const proc = spawn(pythonPath, [heartbeatScript], {
+        windowsHide: true, stdio: 'ignore'
+    });
+    proc.unref();
+    try {
+        fs.writeFileSync(pidFile, String(proc.pid), 'utf-8');
+    } catch (e) {}
+}
+
 // ---- Env Keys ----
 
 function fetchEnvKeys() {
@@ -276,6 +320,12 @@ async function launchStreamlit(cwd) {
         });
         startProc.unref();
     }, 2000);
+
+    // Register project locally for system heartbeat
+    registerProjectLocally(cwd);
+
+    // Start system-level heartbeat (survives IDE close)
+    startSystemHeartbeat();
 
     // Register with central dashboard once Streamlit is up, then heartbeat every 60s
     setTimeout(() => {

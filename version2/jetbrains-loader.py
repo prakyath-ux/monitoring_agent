@@ -374,6 +374,62 @@ while True:
         pass
 
 
+def register_project_locally(project_dir):
+    """Save this project to the list of registered projects for system heartbeat"""
+    reg_file = AGENT_HOME / ".registered_projects.json"
+    projects = []
+    if reg_file.exists():
+        try:
+            projects = json.loads(reg_file.read_text(encoding="utf-8"))
+        except Exception:
+            projects = []
+    if project_dir not in projects:
+        projects.append(project_dir)
+        reg_file.write_text(json.dumps(projects, indent=2), encoding="utf-8")
+
+
+def start_system_heartbeat():
+    """Start system-level heartbeat that runs independent of IDE"""
+    pid_file = AGENT_HOME / ".system_heartbeat_pid"
+
+    # Check if already running
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text(encoding="utf-8").strip())
+            if IS_WINDOWS:
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid}"],
+                    capture_output=True, text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if str(pid) in result.stdout:
+                    return  # Already running
+            else:
+                os.kill(pid, 0)
+                return  # Already running
+        except (ProcessLookupError, OSError, ValueError):
+            pass
+
+    heartbeat_script = AGENT_HOME / "scripts" / "heartbeat.py"
+    if not heartbeat_script.exists():
+        return
+
+    python_path = get_python_path()
+    kwargs = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+    }
+    if IS_WINDOWS:
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    try:
+        proc = subprocess.Popen([python_path, str(heartbeat_script)], **kwargs)
+        pid_file.write_text(str(proc.pid), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def check_status(project_dir):
     pid_file = Path(project_dir) / ".agent" / ".pid"
     if not pid_file.exists():
@@ -389,6 +445,9 @@ def check_status(project_dir):
 
 def cmd_start(project_dir):
     """Full startup sequence — called by JetBrains plugin"""
+    # Register this project for system heartbeat
+    register_project_locally(project_dir)
+
     # Setup if needed
     if not ensure_setup(project_dir):
         print("STATUS:error")
@@ -409,8 +468,11 @@ def cmd_start(project_dir):
     # Register with dashboard
     register_with_dashboard(project_dir, port)
 
-    # Start heartbeat
+    # Start per-project heartbeat
     start_heartbeat(project_dir, port)
+
+    # Start system-level heartbeat (survives IDE close, updates IP for all projects)
+    start_system_heartbeat()
 
     # Wait for agent to start
     time.sleep(5)
