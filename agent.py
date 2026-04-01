@@ -389,7 +389,31 @@ class FileEventHandler(FileSystemEventHandler):
         self._pending_changes = {}  # path -> {"first_change": timestamp, "timer": Timer}
         self._batch_silence = 30  # seconds of silence before logging
         self._batch_max_wait = 300  # max 5 minutes before forced log
+        self._branch_switching = False  # True during branch switch cooldown
+        self._branch_switch_time = 0
+        self._branch_switch_cooldown = 5  # seconds to suppress events after branch switch
         self._preload_file_contents()
+
+    def on_branch_switch(self):
+        """Called by BranchWatcher when branch changes — suppress events and refresh cache"""
+        self._branch_switching = True
+        self._branch_switch_time = time.time()
+        # Cancel all pending batched changes (they're from the old branch)
+        for path, pending in list(self._pending_changes.items()):
+            if pending.get("timer"):
+                pending["timer"].cancel()
+        self._pending_changes.clear()
+        # Refresh RAM cache from disk (new branch files)
+        self._preload_file_contents()
+
+    def _is_branch_switching(self):
+        """Check if we're in the branch switch cooldown period"""
+        if not self._branch_switching:
+            return False
+        if time.time() - self._branch_switch_time > self._branch_switch_cooldown:
+            self._branch_switching = False
+            return False
+        return True
 
     def _preload_file_contents(self):
         """Load existing file contents so first edits have diffs"""
@@ -446,6 +470,8 @@ class FileEventHandler(FileSystemEventHandler):
         if is_paused():
             self._was_paused = True
             return
+        if self._is_branch_switching():
+            return
         self._refresh_cache_if_resumed()
 
         path = os.path.abspath(event.src_path)
@@ -496,6 +522,8 @@ class FileEventHandler(FileSystemEventHandler):
             return
         if is_paused():
             self._was_paused = True
+            return
+        if self._is_branch_switching():
             return
         self._refresh_cache_if_resumed()
 
@@ -553,6 +581,8 @@ class FileEventHandler(FileSystemEventHandler):
         if is_paused():
             self._was_paused = True
             return
+        if self._is_branch_switching():
+            return
         self._refresh_cache_if_resumed()
 
         path = os.path.abspath(event.src_path)
@@ -577,6 +607,8 @@ class FileEventHandler(FileSystemEventHandler):
             return
         if is_paused():
             self._was_paused = True
+            return
+        if self._is_branch_switching():
             return
         self._refresh_cache_if_resumed()
 
@@ -633,8 +665,9 @@ class FileEventHandler(FileSystemEventHandler):
 class BranchWatcher:
     """Polls .git/HEAD for branch switches and logs them"""
 
-    def __init__(self, log_writer, poll_interval=2):
+    def __init__(self, log_writer, event_handler=None, poll_interval=2):
         self.log_writer = log_writer
+        self.event_handler = event_handler
         self.poll_interval = poll_interval
         self.current_branch = get_current_branch()
         self._running = False
@@ -660,6 +693,9 @@ class BranchWatcher:
             if new_branch and new_branch != self.current_branch:
                 old_branch = self.current_branch
                 self.current_branch = new_branch
+                # Suppress file events during branch switch and refresh cache
+                if self.event_handler:
+                    self.event_handler.on_branch_switch()
                 self.log_writer.write(
                     "BRANCH_SWITCHED",
                     ".git/HEAD",
@@ -1094,8 +1130,8 @@ def cmd_start():
         observer = Observer()
     observer.schedule(event_handler, PROJECT_DIR, recursive=True)
 
-    # Start branch watcher
-    branch_watcher = BranchWatcher(log_writer)
+    # Start branch watcher — connected to event handler for branch switch suppression
+    branch_watcher = BranchWatcher(log_writer, event_handler=event_handler)
 
     # Save PID
     Path(PID_FILE).write_text(str(os.getpid()), encoding="utf-8")
