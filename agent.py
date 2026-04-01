@@ -945,7 +945,7 @@ def cmd_init():
         default_ignore = [
             "node_modules/", ".git/", "__pycache__/", ".agent/",
             "*.pyc", ".env", "*.log",
-            "venv/", ".venv/",
+            "venv/", ".venv/", "env/",
             ".next/", "dist/", "build/", "target/",
             ".gradle/", ".idea/", ".vscode/",
             "out/", "bin/", ".cache/", ".nuxt/", ".turbo/",
@@ -1196,7 +1196,7 @@ def cmd_start():
                             ignore_file = Path(IGNORE_FILE)
                             if ignore_file.exists():
                                 ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
-                                required = [".agent/", "node_modules/", "venv/", ".venv/", ".git/", "__pycache__/",
+                                required = [".agent/", "node_modules/", "venv/", ".venv/", "env/", ".git/", "__pycache__/",
                                             ".next/", "dist/", "build/", "target/", ".gradle/", ".idea/",
                                             "out/", "bin/", ".cache/", ".nuxt/", ".turbo/", ".vscode/",
                                             "coverage/", ".nyc_output/", ".pytest_cache/", ".mypy_cache/",
