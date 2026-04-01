@@ -713,6 +713,19 @@ elif page == "Activity Logs":
     st.header("Activity Logs")
     st.markdown("---")
 
+    # Delete logs
+    col_source_h, col_event_h, col_delete_h = st.columns([2, 2, 1])
+    with col_delete_h:
+        available_dates_for_delete = get_log_dates()
+        if available_dates_for_delete:
+            delete_date = st.selectbox("Delete logs for", available_dates_for_delete, key="delete_date")
+            if st.button("Delete", key="delete_log", use_container_width=True):
+                log_to_delete = Path(LOGS_DIR) / f"{delete_date}.log"
+                if log_to_delete.exists():
+                    log_to_delete.unlink()
+                    st.success(f"Deleted {delete_date} logs")
+                    st.rerun()
+
     # Filters row
     col_source, col_event = st.columns(2)
 
