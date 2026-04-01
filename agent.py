@@ -937,7 +937,9 @@ def cmd_init():
             ".dart_tool/", ".flutter-plugins", "ios/Pods/",
             "android/.gradle/", "android/build/", "*.apk", "*.ipa",
             ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
-            "*.egg-info/", ".tox/", "htmlcov/"
+            "*.egg-info/", ".tox/", "htmlcov/",
+            ".chrome_profile/", ".playwright/", "test-results/",
+            "playwright-report/", ".wrangler/", "*.sqlite", "*.db"
         ]
         with open(IGNORE_FILE, "w", encoding="utf-8") as f:
             yaml.dump(default_ignore, f, default_flow_style=False)
@@ -1185,7 +1187,9 @@ def cmd_start():
                                             ".dart_tool/", ".flutter-plugins", "ios/Pods/",
                                             "android/.gradle/", "android/build/", "*.apk", "*.ipa",
                                             ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
-                                            "*.egg-info/", ".tox/", "htmlcov/"]
+                                            "*.egg-info/", ".tox/", "htmlcov/",
+                                            ".chrome_profile/", ".playwright/", "test-results/",
+                                            "playwright-report/", ".wrangler/", "*.sqlite", "*.db"]
                                 changed = False
                                 for pattern in required:
                                     if pattern not in ignore_data:
