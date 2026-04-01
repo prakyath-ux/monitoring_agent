@@ -392,6 +392,9 @@ class FileEventHandler(FileSystemEventHandler):
         self._branch_switching = False  # True during branch switch cooldown
         self._branch_switch_time = 0
         self._branch_switch_cooldown = 5  # seconds to suppress events after branch switch
+        self._bulk_events = []  # timestamps of recent events for bulk detection
+        self._bulk_threshold = 50  # events within 2 seconds = branch switch
+        self._bulk_window = 2  # seconds
         self._preload_file_contents()
 
     def on_branch_switch(self):
@@ -405,6 +408,20 @@ class FileEventHandler(FileSystemEventHandler):
         self._pending_changes.clear()
         # Refresh RAM cache from disk (new branch files)
         self._preload_file_contents()
+
+    def _detect_bulk_events(self):
+        """Detect branch switch by volume — if 50+ events in 2 seconds, it's a switch"""
+        now = time.time()
+        self._bulk_events.append(now)
+        # Remove old events outside the window
+        self._bulk_events = [t for t in self._bulk_events if now - t <= self._bulk_window]
+        if len(self._bulk_events) >= self._bulk_threshold:
+            # Bulk detected — treat as branch switch
+            self._bulk_events.clear()
+            self.on_branch_switch()
+            print(f"  [{datetime.now().strftime('%H:%M:%S')}] Bulk events detected — suppressing (likely branch switch)")
+            return True
+        return False
 
     def _is_branch_switching(self):
         """Check if we're in the branch switch cooldown period"""
@@ -470,7 +487,7 @@ class FileEventHandler(FileSystemEventHandler):
         if is_paused():
             self._was_paused = True
             return
-        if self._is_branch_switching():
+        if self._is_branch_switching() or self._detect_bulk_events():
             return
         self._refresh_cache_if_resumed()
 
@@ -523,7 +540,7 @@ class FileEventHandler(FileSystemEventHandler):
         if is_paused():
             self._was_paused = True
             return
-        if self._is_branch_switching():
+        if self._is_branch_switching() or self._detect_bulk_events():
             return
         self._refresh_cache_if_resumed()
 
@@ -581,7 +598,7 @@ class FileEventHandler(FileSystemEventHandler):
         if is_paused():
             self._was_paused = True
             return
-        if self._is_branch_switching():
+        if self._is_branch_switching() or self._detect_bulk_events():
             return
         self._refresh_cache_if_resumed()
 
@@ -608,7 +625,7 @@ class FileEventHandler(FileSystemEventHandler):
         if is_paused():
             self._was_paused = True
             return
-        if self._is_branch_switching():
+        if self._is_branch_switching() or self._detect_bulk_events():
             return
         self._refresh_cache_if_resumed()
 
