@@ -1,0 +1,33 @@
+{
+  "Backend": [
+    {"match_machine": "PravinTale", "display_name": "Pravin Tale"},
+    {"match_machine": "Bhavana", "display_name": "Bhavana"},
+    {"match_dev_name": "shivakumar", "display_name": "Shivakumar"},
+    {"match_dev_name": "ravishankarroy", "display_name": "RaviShankar Roy"},
+    {"match_dev_name": "suman-pandit", "display_name": "Suman Pandit"},
+    {"match_dev_name": "imp010094-swaraj", "display_name": "Swaraj Kaushal"},
+    {"match_machine": "infra", "match_dev_name": "infra", "display_name": "Priyanshu"}
+  ],
+  "Frontend": [
+    {"match_machine": "Deepali", "display_name": "Deepali"},
+    {"match_machine": "DayalSolanki", "display_name": "Dayal Solanki"},
+    {"match_machine": "subha", "display_name": "Subhashree"}
+  ],
+  "Mobile": [
+    {"match_machine": "Ankit-Raj.local", "display_name": "Ankit Raj"}
+  ],
+  "AI": [
+    {"match_machine": "Prakyath", "display_name": "Prakyath (Laptop)"},
+    {"match_machine": "ai-impacto", "display_name": "AI Server"},
+    {"match_machine": "Prakyath-2.local", "display_name": "Prakyath (Mac Mini)"},
+    {"match_dev_name": "tejas", "display_name": "Tejas"},
+    {"match_machine": "Balaragavesh", "display_name": "Bala"},
+    {"match_machine": "Swastik", "display_name": "Swastik"}
+  ],
+  "Automation": [
+    {"match_machine": "Swarajmund", "display_name": "Swaraj Mund"}
+  ],
+  "DevOps": [
+    {"match_machine": "vikas", "display_name": "Vikas"}
+  ]
+}

@@ -12,7 +12,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ----- Page Config --------#
 st.set_page_config(
-    page_title= "RepoAgent Central Montior",
+    page_title= "RepoAgent Central Monitor",
     page_icon = "",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -71,6 +71,8 @@ def check_login():
 
 check_login()
 
+TEAMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "teams.json")
+
 # ------ helper Functions---------#
 def load_agents():
     """Load registered agents from local JSON file"""
@@ -78,6 +80,30 @@ def load_agents():
         with open(AGENT_FILE, "r") as f:
             return json.load(f)
     return []
+
+def load_teams():
+    """Load team definitions"""
+    if os.path.exists(TEAMS_FILE):
+        with open(TEAMS_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def get_team_for_agent(agent, teams):
+    """Find which team an agent belongs to based on machine/dev_name matching"""
+    machine = agent.get("machine", "")
+    dev_name = agent.get("dev_name", "")
+    for team_name, members in teams.items():
+        for member in members:
+            if "match_machine" in member and "match_dev_name" in member:
+                if machine == member["match_machine"] and dev_name == member["match_dev_name"]:
+                    return team_name, member.get("display_name", dev_name)
+            elif "match_machine" in member:
+                if machine == member["match_machine"]:
+                    return team_name, member.get("display_name", dev_name)
+            elif "match_dev_name" in member:
+                if dev_name == member["match_dev_name"]:
+                    return team_name, member.get("display_name", dev_name)
+    return "Unassigned", dev_name
 
 def save_agents(agents):
     """Save agents list to JSON file"""
@@ -111,8 +137,14 @@ class RegisterHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
-        # Serve .env keys at /env path
+        # Serve .env keys at /env path — only to local network
         if self.path == "/env":
+            client_ip = self.client_address[0]
+            if not client_ip.startswith("10.0.") and client_ip != "127.0.0.1":
+                self.send_response(403)
+                self.end_headers()
+                self.wfile.write(b"Forbidden")
+                return
             env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
             if os.path.exists(env_file):
                 with open(env_file, "r") as f:
@@ -199,30 +231,69 @@ def extract_port(network_url):
 # ── Custom CSS ──
 st.markdown("""
 <style>
-    .status-online { color: #3fb950; font-weight: 700; }
-    .status-offline { color: #f85149; font-weight: 700; }
-    .status-unknown { color: #d29922; font-weight: 700; }
-    .metric-card {
-        background: #1e1e2e;
+    /* Clean light background */
+    .stApp {
+        background: #f8f9fb;
+    }
+
+    /* Status indicators - clean, no glow */
+    .status-online { color: #16a34a; font-weight: 600; }
+    .status-offline { color: #dc2626; font-weight: 600; }
+    .status-unknown { color: #d97706; font-weight: 600; }
+
+    /* Metric cards */
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
         border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-        border: 1px solid #333;
+        padding: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
-    .metric-value {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #58a6ff;
+    [data-testid="stMetricValue"] {
+        color: #1e293b;
     }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #8b949e;
-        margin-top: 5px;
+    [data-testid="stMetricLabel"] {
+        color: #64748b;
     }
-    .agent-row {
-        padding: 12px 16px;
-        border-bottom: 1px solid #21262d;
-        font-size: 0.95rem;
+
+    /* Headers */
+    h1, h2, h3 {
+        color: #1e293b !important;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        background: #4f46e5;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        background: #4338ca;
+    }
+
+    /* Links */
+    a {
+        color: #4f46e5 !important;
+        text-decoration: none;
+        font-weight: 600;
+    }
+    a:hover {
+        color: #3730a3 !important;
+    }
+
+    /* Expander */
+    [data-testid="stExpander"] {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+
+    /* Table text */
+    .stMarkdown code {
+        color: #4f46e5;
+        background: #eef2ff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -230,8 +301,12 @@ st.markdown("""
 
 
 #--------Main Dashboard ---------#
-st.title("RepoAgent - Central Monitor")
-st.caption(f"Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.markdown(f"""
+<div style="background: linear-gradient(135deg, #e0f2fe, #bae6fd, #dbeafe); padding: 28px 32px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #93c5fd;">
+    <h1 style="color: #1e3a5f !important; margin: 0; font-size: 1.8rem;">RepoAgent - Central Monitor</h1>
+    <p style="color: #475569; margin: 6px 0 0 0; font-size: 0.85rem;">Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+</div>
+""", unsafe_allow_html=True)
 st.markdown("---")
 
 #Fetch data from google sheet
@@ -274,6 +349,9 @@ for a in all_agents:
 agents = list(seen.values())
 
 if agents:
+    # Load team definitions
+    teams = load_teams()
+
     # ── Run checks ──
     results = []
     progress = st.progress(0, text="Checking fleet status...")
@@ -296,8 +374,9 @@ if agents:
         else:
             net_status = "offline"
 
+        team_name, display_name = get_team_for_agent(agent, teams)
         results.append({
-            "developer": agent.get("dev_name", "Unknown"),
+            "developer": display_name,
             "project": agent.get("project_name", "—"),
             "machine": agent.get("machine", "—"),
             "ip": ip or "—",
@@ -305,33 +384,46 @@ if agents:
             "net_status": net_status,
             "latency": latency,
             "dashboard": dashboard_alive,
-            "url": url
+            "url": url,
+            "team": team_name
         })
 
         progress.progress((i + 1) / len(agents), text=f"Checking {agent.get('dev_name', '')}...")
 
     progress.empty()
 
-    # ── Summary Metrics ──
-    total = len(results)
-    online = sum(1 for r in results if r["net_status"] in ("online", "firewall"))
-    dashboards_up = sum(1 for r in results if r["dashboard"])
-    offline = total - online
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Machines", total)
-    with col2:
-        st.metric("Online", online)
-    with col3:
-        st.metric("Agents Running", dashboards_up)
-    with col4:
-        st.metric("Offline", offline)
-
     st.markdown("---")
 
     # ── Fleet Table ──
     st.subheader("Fleet Status")
+
+    # Team filter
+    all_teams = ["All"] + list(teams.keys()) + ["Unassigned"]
+    selected_team = st.selectbox("Filter by Team", all_teams, index=0)
+
+    if selected_team != "All":
+        results = [r for r in results if r["team"] == selected_team]
+
+    # ── Summary Metrics (after filter) ──
+    unique_machines = len(set(r["ip"] for r in results if r["ip"] != "—"))
+    total_projects = len(results)
+    online_machines = len(set(r["ip"] for r in results if r["net_status"] in ("online", "firewall") and r["ip"] != "—"))
+    dashboards_up = sum(1 for r in results if r["dashboard"])
+    offline_machines = unique_machines - online_machines
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Machines", unique_machines)
+    with col2:
+        st.metric("Projects", total_projects)
+    with col3:
+        st.metric("Online", online_machines)
+    with col4:
+        st.metric("Running", dashboards_up)
+    with col5:
+        st.metric("Offline", offline_machines)
+
+    st.markdown("---")
 
     # Sort: Running first, then Stopped, then Offline
     def sort_key(r):
