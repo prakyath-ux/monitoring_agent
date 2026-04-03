@@ -13,7 +13,7 @@ import time
 from urllib.request import urlopen, Request
 
 IS_WINDOWS = platform.system() == "Windows"
-DASHBOARD_SERVER = "10.0.3.55"
+DASHBOARD_SERVER = "172.16.0.146"
 DASHBOARD_PORT = 5000
 AGENT_HOME = os.path.join(os.path.expanduser("~"), ".agent-monitor")
 

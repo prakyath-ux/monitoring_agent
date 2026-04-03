@@ -18,7 +18,7 @@ from urllib.error import URLError
 
 IS_WINDOWS = platform.system() == "Windows"
 AGENT_HOME = Path.home() / ".agent-monitor"
-DASHBOARD_SERVER = "10.0.3.55"
+DASHBOARD_SERVER = "172.16.0.146"
 DASHBOARD_PORT = 5000
 
 
@@ -51,7 +51,7 @@ def get_local_ip():
     # Method 1: UDP connect trick — most reliable cross-platform
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.0.3.55", 5000))
+        s.connect(("172.16.0.146", 5000))
         ip = s.getsockname()[0]
         s.close()
         if ip and not ip.startswith("127."):

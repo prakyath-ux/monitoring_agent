@@ -48,10 +48,10 @@ fi
 echo ""
 
 echo "--- Network: Dashboard Server ---"
-if curl -s --max-time 5 http://10.0.3.55:5000/ > /dev/null 2>&1; then
-    echo "  PASS: 10.0.3.55:5000 reachable"
+if curl -s --max-time 5 http://172.16.0.146:5000/ > /dev/null 2>&1; then
+    echo "  PASS: 172.16.0.146:5000 reachable"
 else
-    echo "  FAIL: Cannot reach 10.0.3.55:5000"
+    echo "  FAIL: Cannot reach 172.16.0.146:5000"
     echo "  Check: Are you on the office network?"
 fi
 echo ""

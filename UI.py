@@ -512,7 +512,7 @@ import socket
 import requests
 
 #GSHEET_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
-REGISTER_URL = "http://10.0.3.55:5000/register"
+REGISTER_URL = "http://172.16.0.146:5000/register"
 
 def register_instance():
     """Register this dashboard instance in the shared Google Sheet"""

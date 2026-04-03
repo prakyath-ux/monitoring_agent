@@ -6,7 +6,7 @@
 AGENT_HOME="$HOME/.agent-monitor"
 REPO_URL="https://github.com/prakyath-ux/monitoring_agent.git"
 BRANCH="version2"
-DASHBOARD_SERVER="10.0.3.55"
+DASHBOARD_SERVER="172.16.0.146"
 DASHBOARD_PORT="5000"
 PROJECT_DIR="${1:-$(pwd)}"
 PROJECT_NAME="$(basename "$PROJECT_DIR")"

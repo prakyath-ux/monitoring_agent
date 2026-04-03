@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 set "AGENT_HOME=%USERPROFILE%\.agent-monitor"
 set "REPO_URL=https://github.com/prakyath-ux/monitoring_agent.git"
 set "BRANCH=version2"
-set "DASHBOARD_SERVER=10.0.3.55"
+set "DASHBOARD_SERVER=172.16.0.146"
 set "DASHBOARD_PORT=5000"
 
 REM ── Check and install Git ──

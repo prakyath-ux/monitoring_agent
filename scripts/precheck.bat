@@ -39,11 +39,11 @@ if %errorlevel%==0 (
 echo.
 
 echo --- Network: Dashboard Server ---
-curl -s --max-time 5 http://10.0.3.55:5000/ >nul 2>&1
+curl -s --max-time 5 http://172.16.0.146:5000/ >nul 2>&1
 if %errorlevel%==0 (
-    echo   PASS: 10.0.3.55:5000 reachable
+    echo   PASS: 172.16.0.146:5000 reachable
 ) else (
-    echo   FAIL: Cannot reach 10.0.3.55:5000
+    echo   FAIL: Cannot reach 172.16.0.146:5000
     echo   Check: Are you on the office network?
 )
 echo.

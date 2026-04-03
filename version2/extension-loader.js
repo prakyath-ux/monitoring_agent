@@ -62,7 +62,7 @@ function registerWithDashboard(projectName, port) {
         });
 
         const req = http.request({
-            hostname: '10.0.3.55',
+            hostname: '172.16.0.146',
             port: 5000,
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
@@ -212,7 +212,7 @@ function fetchEnvKeys() {
     const envPath = path.join(AGENT_HOME, '.env');
     if (fs.existsSync(envPath)) return; // Already have keys
     try {
-        const res = execSync('curl -s --max-time 5 http://10.0.3.55:5000/env', { encoding: 'utf-8', env: MIN_ENV });
+        const res = execSync('curl -s --max-time 5 http://172.16.0.146:5000/env', { encoding: 'utf-8', env: MIN_ENV });
         if (res && res.includes('OPENAI_API_KEY')) {
             fs.writeFileSync(envPath, res, 'utf-8');
         }
