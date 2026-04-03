@@ -140,7 +140,7 @@ class RegisterHandler(BaseHTTPRequestHandler):
         # Serve .env keys at /env path — only to local network
         if self.path == "/env":
             client_ip = self.client_address[0]
-            if not client_ip.startswith("10.0.") and client_ip != "127.0.0.1":
+            if not (client_ip.startswith("10.0.") or client_ip.startswith("172.16.") or client_ip == "127.0.0.1"):
                 self.send_response(403)
                 self.end_headers()
                 self.wfile.write(b"Forbidden")
