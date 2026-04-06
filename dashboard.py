@@ -296,15 +296,14 @@ st.markdown("""
         background: #eef2ff;
     }
 
-    /* Progress bar */
-    .stProgress > div > div {
-        height: 8px !important;
-        border-radius: 4px;
+    /* Progress bar — thicker */
+    .stProgress > div > div > div {
+        height: 20px !important;
     }
     .stProgress p {
-        font-size: 0.95rem !important;
-        color: #475569 !important;
-        font-weight: 500;
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        color: #1e293b !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -365,7 +364,7 @@ if agents:
 
     # ── Run checks ──
     results = []
-    progress = st.progress(0, text="Scanning developer machines and verifying dashboard connectivity...")
+    progress = st.progress(0, text="Collecting data from developer machines...")
 
     for i, agent in enumerate(agents):
         ip = extract_ip(agent.get("network_url", ""))
@@ -399,7 +398,7 @@ if agents:
             "team": team_name
         })
 
-        progress.progress((i + 1) / len(agents), text=f"Verifying {agent.get('machine', '')} — {agent.get('project_name', '')}...")
+        progress.progress((i + 1) / len(agents), text=f"Collecting data: {agent.get('machine', '')} - {agent.get('project_name', '')}  [{i+1} of {len(agents)}]")
 
     progress.empty()
 
