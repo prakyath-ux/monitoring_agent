@@ -398,7 +398,8 @@ if agents:
             "team": team_name
         })
 
-        progress.progress((i + 1) / len(agents), text=f"Collecting data: {agent.get('machine', '')} - {agent.get('project_name', '')}  [{i+1} of {len(agents)}]")
+        pct = int(((i + 1) / len(agents)) * 100)
+        progress.progress((i + 1) / len(agents), text=f"Collecting data: {agent.get('machine', '')} - {agent.get('project_name', '')}  ({pct}%)")
 
     progress.empty()
 
