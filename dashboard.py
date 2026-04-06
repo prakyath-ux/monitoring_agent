@@ -50,6 +50,14 @@ def log_login(username):
         json.dump(logs[-100:], f, indent=2)
 
 def check_login():
+    # Check URL token first (persists across browser refresh)
+    params = st.query_params
+    token_user = params.get("auth")
+    if token_user and token_user in DASHBOARD_USERS:
+        st.session_state.authenticated = True
+        st.session_state.logged_in_user = token_user
+        return
+
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
 
@@ -63,6 +71,7 @@ def check_login():
                 if username in DASHBOARD_USERS and password == DASHBOARD_USERS[username]:
                     st.session_state.authenticated = True
                     st.session_state.logged_in_user = username
+                    st.query_params["auth"] = username
                     log_login(username)
                     st.rerun()
                 else:
@@ -361,6 +370,19 @@ agents = list(seen.values())
 if agents:
     # Load team definitions
     teams = load_teams()
+
+    # Filter agents by team before loading (so leads only see their team loading)
+    logged_in_user = st.session_state.get("logged_in_user", "development")
+    user_team_map = {
+        "frontend": "Frontend",
+        "backend": "Backend",
+        "mobile": "Mobile",
+        "AI": "AI",
+    }
+    if logged_in_user != "development":
+        user_team = user_team_map.get(logged_in_user, "")
+        if user_team:
+            agents = [a for a in agents if get_team_for_agent(a, teams)[0] == user_team]
 
     # ── Run checks ──
     results = []
