@@ -295,6 +295,17 @@ st.markdown("""
         color: #4f46e5;
         background: #eef2ff;
     }
+
+    /* Progress bar */
+    .stProgress > div > div {
+        height: 8px !important;
+        border-radius: 4px;
+    }
+    .stProgress p {
+        font-size: 0.95rem !important;
+        color: #475569 !important;
+        font-weight: 500;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -310,7 +321,7 @@ st.markdown(f"""
 st.markdown("---")
 
 #Fetch data from google sheet
-with st.spinner("Loading registered agents..."):
+with st.spinner("Connecting to agent network..."):
     agents = load_agents()
 
 if not agents:
@@ -354,7 +365,7 @@ if agents:
 
     # ── Run checks ──
     results = []
-    progress = st.progress(0, text="Checking fleet status...")
+    progress = st.progress(0, text="Scanning developer machines and verifying dashboard connectivity...")
 
     for i, agent in enumerate(agents):
         ip = extract_ip(agent.get("network_url", ""))
@@ -388,7 +399,7 @@ if agents:
             "team": team_name
         })
 
-        progress.progress((i + 1) / len(agents), text=f"Checking {agent.get('dev_name', '')}...")
+        progress.progress((i + 1) / len(agents), text=f"Verifying {agent.get('machine', '')} — {agent.get('project_name', '')}...")
 
     progress.empty()
 
