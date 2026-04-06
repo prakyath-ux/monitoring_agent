@@ -49,14 +49,23 @@ def log_login(username):
     with open(LOGIN_LOG, "w") as f:
         json.dump(logs[-100:], f, indent=2)
 
+import hashlib
+
+AUTH_SECRET = "repoagent2026"
+
+def make_token(username):
+    return hashlib.sha256(f"{username}:{AUTH_SECRET}".encode()).hexdigest()[:16]
+
 def check_login():
     # Check URL token first (persists across browser refresh)
     params = st.query_params
-    token_user = params.get("auth")
-    if token_user and token_user in DASHBOARD_USERS:
-        st.session_state.authenticated = True
-        st.session_state.logged_in_user = token_user
-        return
+    token = params.get("t")
+    token_user = params.get("u")
+    if token and token_user and token_user in DASHBOARD_USERS:
+        if make_token(token_user) == token:
+            st.session_state.authenticated = True
+            st.session_state.logged_in_user = token_user
+            return
 
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -71,7 +80,8 @@ def check_login():
                 if username in DASHBOARD_USERS and password == DASHBOARD_USERS[username]:
                     st.session_state.authenticated = True
                     st.session_state.logged_in_user = username
-                    st.query_params["auth"] = username
+                    st.query_params["u"] = username
+                    st.query_params["t"] = make_token(username)
                     log_login(username)
                     st.rerun()
                 else:
