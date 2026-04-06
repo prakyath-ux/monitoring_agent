@@ -44,7 +44,7 @@ def log_login(username):
             logs = json.load(f)
     logs.append({
         "user": username,
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "time": (datetime.utcnow() + __import__('datetime').timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M:%S IST")
     })
     with open(LOGIN_LOG, "w") as f:
         json.dump(logs[-100:], f, indent=2)
@@ -330,12 +330,22 @@ st.markdown("""
 
 
 #--------Main Dashboard ---------#
-st.markdown(f"""
-<div style="background: linear-gradient(135deg, #e0f2fe, #bae6fd, #dbeafe); padding: 28px 32px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #93c5fd;">
-    <h1 style="color: #1e3a5f !important; margin: 0; font-size: 1.8rem;">RepoAgent - Central Monitor</h1>
-    <p style="color: #475569; margin: 6px 0 0 0; font-size: 0.85rem;">Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-</div>
-""", unsafe_allow_html=True)
+col_banner, col_user = st.columns([5, 1])
+with col_banner:
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #e0f2fe, #bae6fd, #dbeafe); padding: 28px 32px; border-radius: 12px; border: 1px solid #93c5fd;">
+        <h1 style="color: #1e3a5f !important; margin: 0; font-size: 1.8rem;">RepoAgent - Central Monitor</h1>
+        <p style="color: #475569; margin: 6px 0 0 0; font-size: 0.85rem;">Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    """, unsafe_allow_html=True)
+with col_user:
+    logged_user = st.session_state.get("logged_in_user", "")
+    st.markdown(f'<p style="text-align:right; color:#64748b; margin-top:28px; font-size:0.85rem;">Logged in as <b>{logged_user}</b></p>', unsafe_allow_html=True)
+    if st.button("Logout", key="logout_btn", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.logged_in_user = None
+        st.query_params.clear()
+        st.rerun()
 st.markdown("---")
 
 #Fetch data from google sheet
