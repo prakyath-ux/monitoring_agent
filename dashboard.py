@@ -32,7 +32,7 @@ DASHBOARD_USERS = {
     "backend": "access123",
     "mobile": "access123",
     "AI": "access123",
-    "development": "access123",
+    "development": "access1234",
 }
 
 LOGIN_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "login_log.json")
@@ -408,12 +408,26 @@ if agents:
     # ── Fleet Table ──
     st.subheader("Fleet Status")
 
-    # Team filter
-    all_teams = ["All"] + list(teams.keys()) + ["Unassigned"]
-    selected_team = st.selectbox("Filter by Team", all_teams, index=0)
+    # Team filter — auto-filter by logged-in user's team
+    logged_in_user = st.session_state.get("logged_in_user", "development")
+    user_team_map = {
+        "frontend": "Frontend",
+        "backend": "Backend",
+        "mobile": "Mobile",
+        "AI": "AI",
+    }
 
-    if selected_team != "All":
-        results = [r for r in results if r["team"] == selected_team]
+    if logged_in_user == "development":
+        # Development sees all teams with filter
+        all_teams = ["All"] + list(teams.keys()) + ["Unassigned"]
+        selected_team = st.selectbox("Filter by Team", all_teams, index=0)
+        if selected_team != "All":
+            results = [r for r in results if r["team"] == selected_team]
+    else:
+        # Other leads see only their team
+        team_name = user_team_map.get(logged_in_user, "Unassigned")
+        st.markdown(f"**Team: {team_name}**")
+        results = [r for r in results if r["team"] == team_name]
 
     # ── Summary Metrics (after filter) ──
     unique_machines = len(set(r["ip"] for r in results if r["ip"] != "—"))
