@@ -181,10 +181,11 @@ def run_agent_command(command, *extra_args):
 
 
 def display_tabbed_report(report_text):
-    """Parse report into 5 persona sections and display in Streamlit tabs"""
+    """Parse report into 6 persona sections and display in Streamlit tabs"""
     persona_headers = [
         ("GUARDIAN REPORT", "Guardian"),
         ("ARCHITECT REPORT", "Architect"),
+        ("ARCHITECTURE REVIEW", "Architecture Review"),
         ("STRATEGIST REPORT", "Strategist"),
         ("MENTOR REPORT", "Mentor"),
         ("SOURCE ANALYSIS", "Source Analysis"),
