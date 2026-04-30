@@ -1241,10 +1241,19 @@ def cmd_start():
     # Periodic auto-pull and self-restart every 4 hours
     last_pull = time.time()
     pull_interval = 5 * 60  # 5 minutes
+    last_pid_touch = time.time()
+    pid_touch_interval = 60  # touch PID file every minute as a heartbeat
 
     try:
         while True:
             time.sleep(1)
+            # Touch PID file so the IDE extension knows the agent is alive
+            if time.time() - last_pid_touch >= pid_touch_interval:
+                last_pid_touch = time.time()
+                try:
+                    Path(PID_FILE).write_text(str(os.getpid()), encoding="utf-8")
+                except Exception:
+                    pass
             if time.time() - last_pull >= pull_interval:
                 last_pull = time.time()
                 agent_home = Path(__file__).resolve().parent

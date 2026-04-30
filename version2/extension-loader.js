@@ -345,13 +345,24 @@ async function launchStreamlit(cwd) {
         try {
             if (fs.existsSync(pidFile)) {
                 const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
-                if (IS_WIN) {
-                    // On Windows, process.kill(pid, 0) throws EPERM for valid processes
-                    // PID file exists + has valid PID = agent is running (agent deletes PID on shutdown)
+                // Stale PID detection — agent rewrites PID file on heartbeat (~30s)
+                // If PID file hasn't been touched in 5 min, the agent isn't alive
+                const pidStat = fs.statSync(pidFile);
+                const ageMs = Date.now() - pidStat.mtimeMs;
+                const isStale = ageMs > 5 * 60 * 1000; // 5 minutes
+                if (isStale) {
+                    try { fs.unlinkSync(pidFile); } catch (e) {}
+                    updateStatusBar('stopped');
+                } else if (IS_WIN) {
                     updateStatusBar(pid > 0 ? 'running' : 'stopped');
                 } else {
-                    process.kill(pid, 0);
-                    updateStatusBar('running');
+                    try {
+                        process.kill(pid, 0);
+                        updateStatusBar('running');
+                    } catch (e) {
+                        try { fs.unlinkSync(pidFile); } catch (e2) {}
+                        updateStatusBar('stopped');
+                    }
                 }
             } else {
                 updateStatusBar('stopped');
