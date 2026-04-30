@@ -1105,6 +1105,38 @@ def ensure_agent_files():
     if not Path(STANDARDS_FILE).exists():
         Path(STANDARDS_FILE).write_text("# Company Coding Standards\n\n## Best Practices\n- Add error handling for all async operations\n- Write docstrings for public functions\n- Keep functions under 50 lines\n", encoding="utf-8")
 
+    # Always merge required ignore patterns into ignore.yaml
+    try:
+        ignore_file = Path(IGNORE_FILE)
+        if ignore_file.exists():
+            ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
+        else:
+            ignore_data = []
+        required_ignores = [
+            ".agent/", "node_modules/", "venv/", ".venv/", "env/", ".git/", "__pycache__/",
+            ".next/", "dist/", "build/", "target/", ".gradle/", ".idea/",
+            "out/", "bin/", ".cache/", ".nuxt/", ".turbo/", ".vscode/",
+            "coverage/", ".nyc_output/", ".pytest_cache/", ".mypy_cache/",
+            "*.min.js", "*.map", "*.class", "*.jar", "*.war",
+            ".dart_tool/", ".flutter-plugins", "ios/Pods/",
+            "android/.gradle/", "android/build/", "*.apk", "*.ipa",
+            ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
+            "*.egg-info/", ".tox/", "htmlcov/",
+            ".chrome_profile/", ".playwright/", "test-results/",
+            "playwright-report/", ".wrangler/", "*.sqlite", "*.db",
+            "surefire-reports/", "**/target/**"
+        ]
+        changed = False
+        for pattern in required_ignores:
+            if pattern not in ignore_data:
+                ignore_data.append(pattern)
+                changed = True
+        if changed:
+            with open(str(ignore_file), "w", encoding="utf-8") as f:
+                yaml.dump(ignore_data, f, default_flow_style=False)
+    except Exception:
+        pass
+
 
 def start_system_heartbeat():
     """Start system-level heartbeat, kill old one first to ensure latest code"""
