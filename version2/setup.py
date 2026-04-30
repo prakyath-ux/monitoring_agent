@@ -202,10 +202,6 @@ def validate_project_path(project_path):
     if not path.is_dir():
         logging.error(f"Not a directory: {path}")
         return None
-    if " " in str(path):
-        logging.error(f"Path contains spaces: {path}")
-        logging.error("Rename the folder to remove spaces (use _ instead).")
-        return None
     if not os.access(str(path), os.W_OK):
         logging.error(f"No write permission: {path}")
         return None
