@@ -34,6 +34,39 @@ function findFreePort(start = 8501) {
     });
 }
 
+function probeStreamlitPort(port, projectName) {
+    return new Promise((resolve) => {
+        const req = http.request({
+            hostname: '127.0.0.1',
+            port: port,
+            path: `/${projectName}/_stcore/health`,
+            method: 'GET',
+            timeout: 1500,
+        }, (res) => {
+            res.resume();
+            resolve(res.statusCode === 200);
+        });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => { req.destroy(); resolve(false); });
+        req.end();
+    });
+}
+
+async function verifyStreamlitPort(requestedPort, projectName) {
+    // First try the requested port
+    if (await probeStreamlitPort(requestedPort, projectName)) {
+        return requestedPort;
+    }
+    // Fallback: scan range and find the port serving THIS project
+    for (let p = 8501; p < 8520; p++) {
+        if (p === requestedPort) continue;
+        if (await probeStreamlitPort(p, projectName)) {
+            return p;
+        }
+    }
+    return requestedPort;
+}
+
 function getLocalIP() {
     const interfaces = os.networkInterfaces();
     let fallback = '127.0.0.1';
@@ -328,12 +361,16 @@ async function launchStreamlit(cwd) {
     startSystemHeartbeat();
 
     // Register with central dashboard once Streamlit is up, then heartbeat every 60s
-    setTimeout(() => {
-        registerWithDashboard(projectName, port);
+    setTimeout(async () => {
+        const verifiedPort = await verifyStreamlitPort(port, projectName);
+        registerWithDashboard(projectName, verifiedPort);
         if (heartbeatInterval) clearInterval(heartbeatInterval);
-        heartbeatInterval = setInterval(() => {
+        heartbeatInterval = setInterval(async () => {
             const ip = getLocalIP();
-            if (ip !== '127.0.0.1') registerWithDashboard(projectName, port);
+            if (ip !== '127.0.0.1') {
+                const p = await verifyStreamlitPort(port, projectName);
+                registerWithDashboard(projectName, p);
+            }
         }, 60000);
     }, 8000);
 
