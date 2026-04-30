@@ -24,7 +24,13 @@ st.set_page_config(
 #GSHEET_READ_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
 
 AGENT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents.json")
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
 API_PORT = 5000
+
+import re as _re_for_safe
+def _safe_path_part(s):
+    """Sanitize a string to be safe as a filesystem path component."""
+    return _re_for_safe.sub(r'[^A-Za-z0-9._-]', '_', (s or "unknown"))[:80]
 
 # ------ Authentication ---------#
 DASHBOARD_USERS = {
@@ -124,6 +130,28 @@ def get_team_for_agent(agent, teams):
                     return team_name, member.get("display_name", dev_name)
     return "Unassigned", dev_name
 
+def list_reports_for(dev_name, machine, project_name):
+    """List all reports stored for a given (dev, machine, project) combo."""
+    dev = _safe_path_part(dev_name)
+    proj = _safe_path_part(project_name)
+    machine_safe = _safe_path_part(machine)
+    folder = os.path.join(REPORTS_DIR, f"{dev}__{machine_safe}__{proj}")
+    if not os.path.exists(folder):
+        return []
+    files = []
+    for fname in os.listdir(folder):
+        if fname.endswith(".md"):
+            full = os.path.join(folder, fname)
+            files.append({
+                "filename": fname,
+                "path": full,
+                "size": os.path.getsize(full),
+                "mtime": os.path.getmtime(full),
+            })
+    files.sort(key=lambda x: x["mtime"], reverse=True)
+    return files
+
+
 def save_agents(agents):
     """Save agents list to JSON file"""
     with open(AGENT_FILE, "w") as f:
@@ -132,7 +160,46 @@ def save_agents(agents):
 class RegisterHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
+        raw = self.rfile.read(length)
+        try:
+            body = json.loads(raw)
+        except Exception:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"Invalid JSON")
+            return
+
+        # Report upload — separate path
+        if self.path == "/upload-report":
+            try:
+                dev = _safe_path_part(body.get("dev_name", ""))
+                proj = _safe_path_part(body.get("project_name", ""))
+                machine = _safe_path_part(body.get("machine", ""))
+                ts = _safe_path_part(body.get("timestamp", datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
+                from_d = body.get("from_date") or ""
+                to_d = body.get("to_date") or ""
+                content = body.get("content", "")
+
+                folder = os.path.join(REPORTS_DIR, f"{dev}__{machine}__{proj}")
+                os.makedirs(folder, exist_ok=True)
+
+                # Filename includes date range so leads can identify reports later
+                range_suffix = ""
+                if from_d or to_d:
+                    range_suffix = f"_{_safe_path_part(from_d)}_to_{_safe_path_part(to_d)}"
+                filename = f"report_{ts}{range_suffix}.md"
+
+                with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
+                    f.write(content)
+
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"OK")
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error: {e}".encode())
+            return
 
         # Reject junk project names
         blocked = ['.agent-monitor', '.Trash', '.trash', 'untitled', 'pycharm_agent_test',
@@ -512,7 +579,7 @@ if agents:
         grouped[key].append(r)
 
     # Column headers
-    h_dev, h_proj, h_machine, h_ip, h_ping, h_agent, h_link = st.columns([2, 2, 2, 2, 2, 2, 1])
+    h_dev, h_proj, h_machine, h_ip, h_ping, h_agent, h_link, h_hist = st.columns([2, 2, 2, 2, 2, 2, 1, 1])
     with h_dev:
         st.markdown("**Developer**")
     with h_proj:
@@ -527,11 +594,16 @@ if agents:
         st.markdown("**Dashboard**")
     with h_link:
         st.markdown("**Link**")
+    with h_hist:
+        st.markdown("**History**")
     st.markdown("---")
+
+    if "viewing_report" not in st.session_state:
+        st.session_state.viewing_report = None
 
     for group_key, dev_results in grouped.items():
       for idx, r in enumerate(dev_results):
-        col_dev, col_proj, col_machine, col_ip, col_ping, col_agent, col_link = st.columns([2, 2, 2, 2, 2, 2, 1])
+        col_dev, col_proj, col_machine, col_ip, col_ping, col_agent, col_link, col_hist = st.columns([2, 2, 2, 2, 2, 2, 1, 1])
 
         with col_dev:
             if idx == 0:
@@ -567,7 +639,53 @@ if agents:
         with col_link:
             if r["dashboard"] and r["url"]:
                 st.markdown(f"[Open]({r['url']})")
+        with col_hist:
+            reports = list_reports_for(r["developer"], r["machine"], r["project"])
+            if reports:
+                btn_key = f"hist_{group_key}_{r['project']}_{idx}"
+                if st.button(f"View ({len(reports)})", key=btn_key, use_container_width=True):
+                    st.session_state.viewing_report = {
+                        "dev": r["developer"],
+                        "machine": r["machine"],
+                        "project": r["project"],
+                        "selected_file": None,
+                    }
+            else:
+                st.markdown("—")
       st.markdown("---")
+
+    # ── Report History Viewer ──
+    if st.session_state.viewing_report:
+        ctx = st.session_state.viewing_report
+        st.markdown("---")
+        st.subheader(f"Report History — {ctx['dev']} / {ctx['project']}")
+        col_close, _ = st.columns([1, 6])
+        with col_close:
+            if st.button("Close", key="close_history"):
+                st.session_state.viewing_report = None
+                st.rerun()
+
+        reports = list_reports_for(ctx["dev"], ctx["machine"], ctx["project"])
+
+        if not reports:
+            st.info("No reports yet for this project.")
+        else:
+            col_list, col_view = st.columns([1, 3])
+            with col_list:
+                st.markdown("**Reports**")
+                for rep in reports:
+                    when = datetime.fromtimestamp(rep["mtime"]).strftime("%Y-%m-%d %H:%M")
+                    label = f"{when}"
+                    if st.button(label, key=f"rep_{rep['filename']}", use_container_width=True):
+                        st.session_state.viewing_report["selected_file"] = rep["path"]
+                        st.rerun()
+            with col_view:
+                sel = ctx.get("selected_file")
+                if sel and os.path.exists(sel):
+                    with open(sel, "r", encoding="utf-8") as f:
+                        st.markdown(f.read())
+                else:
+                    st.info("Select a report from the list to view it.")
 
     # ── Auto Refresh ──
     st.markdown("---")

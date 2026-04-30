@@ -1387,7 +1387,7 @@ def cmd_report(from_date=None, to_date=None):
     config = load_config()
     engine = ReportEngine(config)
     report = engine.generate_report(from_date, to_date)
-    
+
     if report:
         #Print report (clean, no separators — stdout is captured by UI)
         print(report)
@@ -1398,6 +1398,46 @@ def cmd_report(from_date=None, to_date=None):
         report_file = Path(REPORTS_DIR) / f"report_{timestamp}.md"
         report_file.write_text(report, encoding="utf-8")
         print(f"Report savd to: {report_file}")
+
+        # Upload to central dashboard so leads can access history even when dev is offline
+        try:
+            upload_report_to_server(report, from_date, to_date, timestamp)
+        except Exception as e:
+            print(f"  Report upload skipped: {e}")
+
+
+def upload_report_to_server(report_content, from_date, to_date, timestamp):
+    """POST the generated report to the central dashboard for history archival."""
+    from urllib.request import Request, urlopen
+
+    DASHBOARD_SERVER = "172.16.0.146"
+    DASHBOARD_PORT = 5000
+
+    project_name = os.path.basename(PROJECT_DIR)
+    dev_name = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+    machine = os.uname().nodename if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "unknown")
+
+    payload = {
+        "type": "report",
+        "dev_name": dev_name,
+        "project_name": project_name,
+        "machine": machine,
+        "from_date": from_date or "",
+        "to_date": to_date or "",
+        "timestamp": timestamp,
+        "content": report_content,
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    req = Request(
+        f"http://{DASHBOARD_SERVER}:{DASHBOARD_PORT}/upload-report",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(req, timeout=10) as resp:
+        if resp.status == 200:
+            print(f"  Report uploaded to dashboard history")
 
 
 def cmd_logs(date=None):
