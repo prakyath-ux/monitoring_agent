@@ -188,23 +188,38 @@ def launch_streamlit(project_dir):
         print(f"ERROR: Streamlit failed: {e}")
         return 0
 
-    # Wait and detect actual port from Streamlit
+    # Wait for Streamlit to start, verify it's on the requested port serving this project
     time.sleep(3)
-    actual_port = detect_actual_port(project_dir, port)
+    actual_port = verify_streamlit_port(port, project_name)
     return actual_port
 
 
-def detect_actual_port(project_dir, default_port):
-    """Check which port Streamlit actually started on"""
-    for port in range(8501, 8510):
+def verify_streamlit_port(requested_port, project_name):
+    """Verify Streamlit is running on the requested port for THIS project.
+    Falls back to scanning if not, but prefers the port we asked for."""
+    import urllib.request
+    # First check the port we asked for — if our project's baseUrlPath responds, we're good
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{requested_port}/{project_name}/_stcore/health",
+            timeout=2,
+        ) as r:
+            if r.status == 200:
+                return requested_port
+    except Exception:
+        pass
+    # Fallback — scan range and find the port serving THIS project
+    for port in range(8501, 8520):
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                s.connect(("127.0.0.1", port))
-                return port
-        except (OSError, socket.timeout):
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/{project_name}/_stcore/health",
+                timeout=1,
+            ) as r:
+                if r.status == 200:
+                    return port
+        except Exception:
             continue
-    return default_port
+    return requested_port
 
 
 def start_agent(project_dir):
