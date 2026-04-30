@@ -744,9 +744,29 @@ elif page == "Activity Logs":
     if not available_dates:
         st.info("No activity logs found. Start the agent and make some file changes.")
     else:
+        # Pagination: 5 days per page (newest first)
+        DAYS_PER_PAGE = 5
+        total_pages = (len(available_dates) + DAYS_PER_PAGE - 1) // DAYS_PER_PAGE
+
+        if total_pages > 1:
+            page = st.number_input(
+                f"Page (1 - {total_pages})",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1,
+                help=f"Showing {DAYS_PER_PAGE} days per page. Total {len(available_dates)} days of logs."
+            )
+        else:
+            page = 1
+
+        start_idx = (page - 1) * DAYS_PER_PAGE
+        end_idx = start_idx + DAYS_PER_PAGE
+        dates_on_page = available_dates[start_idx:end_idx]
+
         total_shown = 0
 
-        for date in available_dates:
+        for date in dates_on_page:
             log_file = Path(LOGS_DIR) / f"{date}.log"
             if not log_file.exists():
                 continue
@@ -771,8 +791,8 @@ elif page == "Activity Logs":
 
             total_shown += len(entries)
 
-            # Clickable date header
-            with st.expander(f"{date}  —  {len(entries)} event(s)", expanded=(date == available_dates[0])):
+            # Clickable date header — only the most recent date on each page is expanded
+            with st.expander(f"{date}  —  {len(entries)} event(s)", expanded=(date == dates_on_page[0])):
                 for entry in entries:
                     source = entry.get("source", "Unknown")
                     if "AI" in source:
@@ -807,7 +827,7 @@ elif page == "Activity Logs":
                         with st.expander(f"View Content — {short_path}", expanded=False):
                             st.code(entry["content"], language="python")
 
-        st.caption(f"Total: {total_shown} entries across {len(available_dates)} day(s)")
+        st.caption(f"Page {page} of {total_pages} — Showing {total_shown} entries across {len(dates_on_page)} day(s) on this page (Total {len(available_dates)} day(s) of logs)")
 
 
 # ══════════════════════════════════════════════════
