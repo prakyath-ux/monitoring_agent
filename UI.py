@@ -16,6 +16,87 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ── Mermaid renderer for architecture reports ──
+import streamlit.components.v1 as _arch_components
+import json as _arch_json
+import uuid as _arch_uuid
+
+_MERMAID_FENCED = re.compile(r'```mermaid\s*\n(.*?)```', re.DOTALL)
+_MERMAID_BARE = re.compile(
+    r'^(flowchart\s+[A-Z]+|graph\s+[A-Z]+)\s*\n((?:[ \t]+.*\n)+)',
+    re.MULTILINE,
+)
+_MERMAID_SUBGRAPH = re.compile(r'^(\s*subgraph\s+)([^\n]+)$', re.MULTILINE)
+
+def _sanitize_mermaid(content):
+    """Quote subgraph names containing hyphens/dots/spaces so Mermaid can parse."""
+    def _fix(m):
+        prefix = m.group(1)
+        name = m.group(2).strip()
+        if not name or name.startswith('"') or name.startswith("'"):
+            return m.group(0)
+        if re.search(r'[-.\s]', name):
+            return f'{prefix}"{name}"'
+        return m.group(0)
+    return _MERMAID_SUBGRAPH.sub(_fix, content)
+
+def _render_mermaid_via_api(content):
+    """Render a Mermaid block via mermaid.render(). On parse error, the iframe
+    shows the actual error message + source for debugging.
+    """
+    container_id = f"mm-{_arch_uuid.uuid4().hex[:8]}"
+    src_js = _arch_json.dumps(content)
+    html = f"""
+    <div id="{container_id}" style="background:white;padding:20px;border-radius:8px;min-height:300px;overflow:auto;"></div>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({{ startOnLoad: false, theme: 'default', securityLevel: 'loose' }});
+      const src = {src_js};
+      try {{
+        const {{ svg }} = await mermaid.render('g-{container_id}', src);
+        document.getElementById('{container_id}').innerHTML = svg;
+      }} catch (e) {{
+        const msg = (e && e.message) ? e.message : String(e);
+        document.getElementById('{container_id}').innerHTML =
+          '<div style="color:#c00;font-family:system-ui;margin-bottom:10px;"><b>Mermaid render failed:</b><br>' +
+          msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          '</div><pre style="background:#fee;padding:10px;border-radius:4px;white-space:pre-wrap;font-size:12px;">' +
+          src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          '</pre>';
+      }}
+    </script>
+    """
+    _arch_components.html(html, height=550, scrolling=True)
+
+def render_architecture_markdown(md_text):
+    """Render markdown, converting mermaid blocks into rendered diagrams.
+
+    Handles both fenced ```mermaid blocks and bare flowchart/graph blocks.
+    Bare-wrap only runs when no fenced block is already present, otherwise
+    it double-fences and breaks the lazy fenced-regex.
+    """
+    if not _MERMAID_FENCED.search(md_text):
+        def _wrap_bare(m):
+            return f"```mermaid\n{m.group(1)}\n{m.group(2)}```\n"
+        md_text = _MERMAID_BARE.sub(_wrap_bare, md_text)
+
+    parts = []
+    last = 0
+    for m in _MERMAID_FENCED.finditer(md_text):
+        if m.start() > last:
+            parts.append(("md", md_text[last:m.start()]))
+        parts.append(("mermaid", m.group(1).strip()))
+        last = m.end()
+    if last < len(md_text):
+        parts.append(("md", md_text[last:]))
+
+    for kind, content in parts:
+        if kind == "md":
+            st.markdown(content)
+        else:
+            _render_mermaid_via_api(_sanitize_mermaid(content))
+
+
 # ── Constants ──
 PROJECT_DIR = os.environ.get("AGENT_PROJECT_DIR", os.getcwd())
 
@@ -923,7 +1004,7 @@ elif page == "Architecture":
     if "arch_output" in st.session_state and st.session_state.arch_output:
         st.markdown("---")
         st.subheader("Latest Analysis")
-        st.markdown(st.session_state.arch_output)
+        render_architecture_markdown(st.session_state.arch_output)
 
     st.markdown("---")
     st.subheader("Past Architecture Reports")
@@ -945,7 +1026,7 @@ elif page == "Architecture":
                 arch_path = reports_path / st.session_state.viewing_arch
                 if arch_path.exists():
                     st.subheader(f"{st.session_state.viewing_arch}")
-                    st.markdown(arch_path.read_text(encoding="utf-8", errors="replace"))
+                    render_architecture_markdown(arch_path.read_text(encoding="utf-8", errors="replace"))
         else:
             st.info("No architecture reports yet. Click Generate above.")
     else:

@@ -32,6 +32,93 @@ def _safe_path_part(s):
     """Sanitize a string to be safe as a filesystem path component."""
     return _re_for_safe.sub(r'[^A-Za-z0-9._-]', '_', (s or "unknown"))[:80]
 
+
+# ---- Mermaid renderer for architecture reports ----
+import streamlit.components.v1 as _arch_components
+import json as _arch_json
+import uuid as _arch_uuid
+
+_MERMAID_FENCED = _re_for_safe.compile(r'```mermaid\s*\n(.*?)```', _re_for_safe.DOTALL)
+_MERMAID_BARE = _re_for_safe.compile(
+    r'^(flowchart\s+[A-Z]+|graph\s+[A-Z]+)\s*\n((?:[ \t]+.*\n)+)',
+    _re_for_safe.MULTILINE,
+)
+_MERMAID_SUBGRAPH = _re_for_safe.compile(r'^(\s*subgraph\s+)([^\n]+)$', _re_for_safe.MULTILINE)
+
+def _sanitize_mermaid(content):
+    """Quote subgraph names containing hyphens/dots/spaces so Mermaid can parse."""
+    def _fix(m):
+        prefix = m.group(1)
+        name = m.group(2).strip()
+        if not name or name.startswith('"') or name.startswith("'"):
+            return m.group(0)
+        if _re_for_safe.search(r'[-.\s]', name):
+            return f'{prefix}"{name}"'
+        return m.group(0)
+    return _MERMAID_SUBGRAPH.sub(_fix, content)
+
+def _render_mermaid_via_api(content):
+    """Render a Mermaid block by calling mermaid.render() programmatically.
+    On parse error, the iframe shows the actual error + source for debugging.
+    Also always shows a 'DEBUG: source' pre block so we can see what was passed.
+    """
+    container_id = f"mm-{_arch_uuid.uuid4().hex[:8]}"
+    src_js = _arch_json.dumps(content)
+    html = f"""
+    <div id="{container_id}" style="background:white;padding:20px;border-radius:8px;min-height:300px;overflow:auto;"></div>
+    <details style="margin-top:8px;font-family:system-ui;font-size:12px;">
+      <summary style="cursor:pointer;color:#555;">DEBUG: show diagram source passed to Mermaid</summary>
+      <pre id="dbg-{container_id}" style="background:#f4f4f4;padding:10px;border-radius:4px;white-space:pre-wrap;border:1px solid #ddd;"></pre>
+    </details>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({{ startOnLoad: false, theme: 'default', securityLevel: 'loose' }});
+      const src = {src_js};
+      document.getElementById('dbg-{container_id}').textContent =
+        '[length=' + src.length + ']\\n' + src;
+      try {{
+        const {{ svg }} = await mermaid.render('g-{container_id}', src);
+        document.getElementById('{container_id}').innerHTML = svg;
+      }} catch (e) {{
+        const msg = (e && e.message) ? e.message : String(e);
+        document.getElementById('{container_id}').innerHTML =
+          '<div style="color:#c00;font-family:system-ui;margin-bottom:10px;"><b>Mermaid render failed:</b><br>' +
+          msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          '</div>';
+      }}
+    </script>
+    """
+    _arch_components.html(html, height=620, scrolling=True)
+
+def render_architecture_markdown(md_text):
+    """Render markdown, converting mermaid blocks into actual rendered diagrams.
+
+    Handles both fenced ```mermaid blocks and bare flowchart/graph blocks
+    (some LLM outputs forget the fence). Bare-wrap only runs when no fenced
+    block is already present — otherwise it double-fences and breaks the
+    lazy regex below.
+    """
+    if not _MERMAID_FENCED.search(md_text):
+        def _wrap_bare(m):
+            return f"```mermaid\n{m.group(1)}\n{m.group(2)}```\n"
+        md_text = _MERMAID_BARE.sub(_wrap_bare, md_text)
+
+    parts = []
+    last = 0
+    for m in _MERMAID_FENCED.finditer(md_text):
+        if m.start() > last:
+            parts.append(("md", md_text[last:m.start()]))
+        parts.append(("mermaid", m.group(1).strip()))
+        last = m.end()
+    if last < len(md_text):
+        parts.append(("md", md_text[last:]))
+
+    for kind, content in parts:
+        if kind == "md":
+            st.markdown(content)
+        else:
+            _render_mermaid_via_api(_sanitize_mermaid(content))
+
 # ------ Authentication ---------#
 DASHBOARD_USERS = {
     "frontend": "access123",
@@ -504,6 +591,7 @@ if agents:
         team_name, display_name = get_team_for_agent(agent, teams)
         results.append({
             "developer": display_name,
+            "dev_name_raw": agent.get("dev_name", ""),
             "project": agent.get("project_name", "—"),
             "machine": agent.get("machine", "—"),
             "ip": ip or "—",
@@ -608,8 +696,35 @@ if agents:
         st.markdown("**Architecture**")
     st.markdown("---")
 
-    if "viewing_report" not in st.session_state:
-        st.session_state.viewing_report = None
+    @st.dialog("Report History", width="large")
+    def report_history_dialog(dev_raw, machine, project, display_name):
+        st.caption(f"{display_name} / {project}")
+        reports = list_reports_for(dev_raw, machine, project)
+        if not reports:
+            st.info("No reports yet for this project.")
+            return
+        options = {datetime.fromtimestamp(r["mtime"]).strftime("%Y-%m-%d %H:%M"): r["path"] for r in reports}
+        labels = list(options.keys())
+        pick = st.selectbox("Select report", labels, index=0, key=f"pick_rep_{dev_raw}_{project}")
+        sel_path = options[pick]
+        if os.path.exists(sel_path):
+            with open(sel_path, "r", encoding="utf-8") as f:
+                st.markdown(f.read())
+
+    @st.dialog("Architecture", width="large")
+    def architecture_dialog(dev_raw, machine, project, display_name):
+        st.caption(f"{display_name} / {project}")
+        archs = list_reports_for(dev_raw, machine, project, prefix="architecture_")
+        if not archs:
+            st.info("No architecture reports yet for this project.")
+            return
+        options = {datetime.fromtimestamp(r["mtime"]).strftime("%Y-%m-%d %H:%M"): r["path"] for r in archs}
+        labels = list(options.keys())
+        pick = st.selectbox("Select snapshot", labels, index=0, key=f"pick_arch_{dev_raw}_{project}")
+        sel_path = options[pick]
+        if os.path.exists(sel_path):
+            with open(sel_path, "r", encoding="utf-8") as f:
+                render_architecture_markdown(f.read())
 
     for group_key, dev_results in grouped.items():
       for idx, r in enumerate(dev_results):
@@ -650,97 +765,23 @@ if agents:
             if r["dashboard"] and r["url"]:
                 st.markdown(f"[Open]({r['url']})")
         with col_hist:
-            reports = list_reports_for(r["developer"], r["machine"], r["project"])
+            reports = list_reports_for(r["dev_name_raw"], r["machine"], r["project"])
             if reports:
                 btn_key = f"hist_{group_key}_{r['project']}_{idx}"
                 if st.button(f"View ({len(reports)})", key=btn_key, use_container_width=True):
-                    st.session_state.viewing_report = {
-                        "dev": r["developer"],
-                        "machine": r["machine"],
-                        "project": r["project"],
-                        "selected_file": None,
-                    }
+                    report_history_dialog(r["dev_name_raw"], r["machine"], r["project"], r["developer"])
             else:
                 st.markdown("—")
         with col_arch:
-            archs = list_reports_for(r["developer"], r["machine"], r["project"], prefix="architecture_")
+            archs = list_reports_for(r["dev_name_raw"], r["machine"], r["project"], prefix="architecture_")
             if archs:
                 arch_key = f"arch_{group_key}_{r['project']}_{idx}"
                 if st.button(f"Arch ({len(archs)})", key=arch_key, use_container_width=True):
-                    st.session_state.viewing_arch = {
-                        "dev": r["developer"],
-                        "machine": r["machine"],
-                        "project": r["project"],
-                        "selected_file": None,
-                    }
+                    architecture_dialog(r["dev_name_raw"], r["machine"], r["project"], r["developer"])
             else:
                 st.markdown("—")
       st.markdown("---")
 
-    # ── Report History Viewer ──
-    if st.session_state.viewing_report:
-        ctx = st.session_state.viewing_report
-        st.markdown("---")
-        st.subheader(f"Report History — {ctx['dev']} / {ctx['project']}")
-        col_close, _ = st.columns([1, 6])
-        with col_close:
-            if st.button("Close", key="close_history"):
-                st.session_state.viewing_report = None
-                st.rerun()
-
-        reports = list_reports_for(ctx["dev"], ctx["machine"], ctx["project"])
-
-        if not reports:
-            st.info("No reports yet for this project.")
-        else:
-            col_list, col_view = st.columns([1, 3])
-            with col_list:
-                st.markdown("**Reports**")
-                for rep in reports:
-                    when = datetime.fromtimestamp(rep["mtime"]).strftime("%Y-%m-%d %H:%M")
-                    label = f"{when}"
-                    if st.button(label, key=f"rep_{rep['filename']}", use_container_width=True):
-                        st.session_state.viewing_report["selected_file"] = rep["path"]
-                        st.rerun()
-            with col_view:
-                sel = ctx.get("selected_file")
-                if sel and os.path.exists(sel):
-                    with open(sel, "r", encoding="utf-8") as f:
-                        st.markdown(f.read())
-                else:
-                    st.info("Select a report from the list to view it.")
-
-    # ── Architecture Viewer ──
-    if st.session_state.get("viewing_arch"):
-        ctx = st.session_state.viewing_arch
-        st.markdown("---")
-        st.subheader(f"Architecture — {ctx['dev']} / {ctx['project']}")
-        col_close, _ = st.columns([1, 6])
-        with col_close:
-            if st.button("Close", key="close_arch"):
-                st.session_state.viewing_arch = None
-                st.rerun()
-
-        archs = list_reports_for(ctx["dev"], ctx["machine"], ctx["project"], prefix="architecture_")
-
-        if not archs:
-            st.info("No architecture reports yet for this project.")
-        else:
-            col_list, col_view = st.columns([1, 3])
-            with col_list:
-                st.markdown("**Snapshots**")
-                for rep in archs:
-                    when = datetime.fromtimestamp(rep["mtime"]).strftime("%Y-%m-%d %H:%M")
-                    if st.button(when, key=f"arch_pick_{rep['filename']}", use_container_width=True):
-                        st.session_state.viewing_arch["selected_file"] = rep["path"]
-                        st.rerun()
-            with col_view:
-                sel = ctx.get("selected_file")
-                if sel and os.path.exists(sel):
-                    with open(sel, "r", encoding="utf-8") as f:
-                        st.markdown(f.read())
-                else:
-                    st.info("Select a snapshot from the list to view it.")
 
     # ── Auto Refresh ──
     st.markdown("---")

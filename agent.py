@@ -1612,9 +1612,42 @@ Output strict Markdown with these EXACT section headers (used for parsing):
 A 3-5 sentence plain-English description of what this project does, based on the structure and manifests. State the inferred tech stack. If the inference is uncertain, say so.
 
 ## ARCHITECTURE FLOW
-A Mermaid diagram (```mermaid flowchart TB ... ```) showing the major components/modules and how they relate. Use the actual folder/module names from the tree. Keep it readable — group sub-modules into subgraphs by top-level folder. Maximum 25 nodes.
+A Mermaid diagram showing the runtime/logical architecture — the major components and HOW THEY CALL OR FLOW INTO EACH OTHER. This is NOT a folder tree. Reason about the code first, then draw the diagram.
 
-Then below the Mermaid block, an ASCII fallback diagram in a plain code block, in case Mermaid doesn't render.
+How to reason before drawing:
+1. From the manifest files and entry points, identify the tech stack and runtime shape (web service, batch job, library, CLI, etc.).
+2. Identify the main components: entry point(s), controllers/routes, services/business logic, data access / repositories, external dependencies (DBs, queues, identity providers, third-party APIs).
+3. Determine the call direction. In a typical service: client → controller → service → repository → database. In an event-driven system: producer → queue → consumer → store. Use evidence from the manifests; if direction is genuinely ambiguous, fall back to the standard pattern for that stack.
+
+REQUIREMENTS for the diagram (any of these failing means the diagram is unacceptable):
+- **Every node MUST have at least one edge (incoming or outgoing).** Disconnected nodes are forbidden. If you cannot connect a node, drop it.
+- **Use directed arrows `-->` to show direction of calls / data flow / dependencies.** Label edges when the relationship is non-obvious, e.g. `Service -->|reads/writes| DB`.
+- Group internal modules into subgraphs by top-level folder; put external services in a separate subgraph (e.g. `subgraph External`).
+- 6–20 nodes is the sweet spot. Hard maximum 25.
+- Prefer fewer, meaningful nodes over many granular ones. Collapse trivial sub-folders into their parent.
+
+CRITICAL FORMAT — the diagram MUST be wrapped in a fenced code block tagged `mermaid`:
+
+```mermaid
+flowchart TB
+    subgraph App
+        Controller --> Service
+        Service --> Repository
+    end
+    subgraph External
+        DB[("PostgreSQL")]
+        Auth[("Keycloak")]
+    end
+    Repository --> DB
+    Controller --> Auth
+```
+
+MERMAID SYNTAX RULES (failing these breaks rendering):
+- Node IDs must be alphanumeric only (A, B, Node1, ServiceA). NO hyphens, dots, slashes, or spaces in IDs.
+- Subgraph names with hyphens, dots, slashes, or spaces MUST be wrapped in double quotes. Correct: `subgraph "iform-service"`. Wrong: `subgraph iform-service`.
+- Labels inside square brackets [...] can contain any characters — use brackets for the human-readable name.
+
+Do NOT include an ASCII tree version. Do NOT just list folders. The system renders the Mermaid block as an actual visual diagram.
 
 ## ALIGNMENT WITH PURPOSE
 Quote 1-2 lines from purpose.md, then give a verdict: ALIGNED / PARTIALLY ALIGNED / DRIFTING / VIOLATION. Justify the verdict with specific file/module evidence.
@@ -1653,7 +1686,9 @@ Rules:
 {summary}
 """
 
-        model = self.config.get("model", "gpt-4o")
+        # Architecture analysis always uses a stronger model than regular reports.
+        # Hardcoded here so every dev gets the same quality regardless of local config.yaml.
+        model = "gpt-5.1"
         print(f"  Calling {model} for architecture analysis...")
         resp = self.client.chat.completions.create(
             model=model,
