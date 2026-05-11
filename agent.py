@@ -1266,7 +1266,7 @@ def cmd_start():
 
     # Periodic auto-pull and self-restart every 4 hours
     last_pull = time.time()
-    pull_interval = 5 * 60  # 5 minutes
+    pull_interval = 2 * 60  # 2 minutes (faster propagation during active development)
     last_pid_touch = time.time()
     pid_touch_interval = 60  # touch PID file every minute as a heartbeat
 
