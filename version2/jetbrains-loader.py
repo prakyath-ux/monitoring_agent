@@ -315,8 +315,11 @@ def register_with_dashboard(project_dir, port):
 
 
 def start_heartbeat(project_dir, port):
-    """Start heartbeat as a background process"""
-    # Write a small heartbeat script and run it
+    """Start heartbeat as a background process.
+
+    Re-verifies the Streamlit port on every cycle so multi-project devs
+    whose Streamlit shifts between ports stay visible on the dashboard.
+    """
     hb_script = AGENT_HOME / ".heartbeat.py"
     hb_script.write_text(f"""
 import time, json, socket, os
@@ -324,7 +327,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 project_dir = {repr(project_dir)}
-port = {port}
+initial_port = {port}
 server = "{DASHBOARD_SERVER}"
 server_port = {DASHBOARD_PORT}
 
@@ -353,12 +356,28 @@ def get_local_ip():
     except: pass
     return fallback
 
+def find_port_for_project(project_name, hint):
+    # Probe the hinted port first, then scan 8501-8520 for THIS project's health endpoint.
+    candidates = [hint] + [p for p in range(8501, 8521) if p != hint]
+    for p in candidates:
+        try:
+            with urlopen(f"http://127.0.0.1:{{p}}/{{project_name}}/_stcore/health", timeout=1) as r:
+                if r.status == 200:
+                    return p
+        except: continue
+    return None
+
 def register():
     ip = get_local_ip()
-    if ip == "127.0.0.1": return  # Heartbeat skip — don't overwrite good IP
+    if ip == "127.0.0.1": return  # don't overwrite a good registered IP with localhost
+    project_name = os.path.basename(project_dir)
+    port = find_port_for_project(project_name, initial_port)
+    if port is None:
+        # Streamlit for this project isn't running anywhere right now —
+        # skip rather than push a wrong URL.
+        return
     dev_name = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
     machine = socket.gethostname()
-    project_name = os.path.basename(project_dir)
     data = json.dumps({{"dev_name": dev_name, "project_name": project_name,
         "network_url": f"http://{{ip}}:{{port}}/{{project_name}}", "machine": machine}}).encode("utf-8")
     try:

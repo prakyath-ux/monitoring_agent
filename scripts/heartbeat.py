@@ -87,26 +87,34 @@ def get_registered_projects():
     return projects
 
 
+def find_streamlit_port_for_project(project_name, port_lo=8501, port_hi=8520):
+    """Probe every port in the range for /<project_name>/_stcore/health.
+    Returns the port that actually serves THIS project, or None if not running.
+    """
+    for p in range(port_lo, port_hi + 1):
+        try:
+            req = Request(
+                "http://127.0.0.1:{}/{}/_stcore/health".format(p, project_name),
+                method="GET",
+            )
+            with urlopen(req, timeout=1) as r:
+                if r.status == 200:
+                    return p
+        except Exception:
+            continue
+    return None
+
+
 def register_project(project_dir, ip):
     project_name = os.path.basename(project_dir)
     dev_name = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
     machine = socket.gethostname()
 
-    # Detect which port Streamlit might be on
-    port = 8501
-    pid_file = os.path.join(project_dir, ".agent", ".streamlit_pid")
-    if os.path.exists(pid_file):
-        # Streamlit is running, find its port
-        for p in range(8501, 8510):
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.5)
-                s.connect(("127.0.0.1", p))
-                s.close()
-                port = p
-                break
-            except Exception:
-                continue
+    port = find_streamlit_port_for_project(project_name)
+    if port is None:
+        # No Streamlit currently serving this project — skip the heartbeat
+        # so we don't push a wrong URL onto the dashboard.
+        return
 
     data = json.dumps({
         "dev_name": dev_name,
