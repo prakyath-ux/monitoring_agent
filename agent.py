@@ -1406,8 +1406,11 @@ def cmd_report(from_date=None, to_date=None):
             print(f"  Report upload skipped: {e}")
 
 
-def upload_report_to_server(report_content, from_date, to_date, timestamp):
-    """POST the generated report to the central dashboard for history archival."""
+def upload_report_to_server(report_content, from_date, to_date, timestamp, report_type="report"):
+    """POST the generated report to the central dashboard for history archival.
+
+    report_type: "report" for activity-log reports, "architecture" for architecture critiques.
+    """
     from urllib.request import Request, urlopen
 
     DASHBOARD_SERVER = "172.16.0.146"
@@ -1418,7 +1421,7 @@ def upload_report_to_server(report_content, from_date, to_date, timestamp):
     machine = os.uname().nodename if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "unknown")
 
     payload = {
-        "type": "report",
+        "type": report_type,
         "dev_name": dev_name,
         "project_name": project_name,
         "machine": machine,
@@ -1438,6 +1441,259 @@ def upload_report_to_server(report_content, from_date, to_date, timestamp):
     with urlopen(req, timeout=10) as resp:
         if resp.status == 200:
             print(f"  Report uploaded to dashboard history")
+
+
+# ====================================== ARCHITECTURE ENGINE ======================================
+# walk project → build structure summary → load purpose → OpenAI → architecture critique
+
+ARCH_ENTRY_POINTS = {
+    "main.py", "app.py", "server.py", "manage.py", "wsgi.py", "asgi.py", "run.py", "__main__.py",
+    "index.js", "index.ts", "index.tsx", "main.js", "main.ts", "App.tsx", "App.jsx", "server.js",
+    "Main.java", "Application.java", "main.go", "main.rs", "Program.cs",
+}
+ARCH_MANIFESTS = {
+    "requirements.txt", "pyproject.toml", "Pipfile", "setup.py", "setup.cfg",
+    "package.json", "tsconfig.json", "pom.xml", "build.gradle", "build.gradle.kts",
+    "Cargo.toml", "go.mod", "Gemfile", "composer.json", "Dockerfile", "docker-compose.yml",
+    ".env.example", "Makefile",
+}
+
+def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars=2000):
+    """Walk the project and build a compact architecture summary for the LLM.
+
+    Returns a string with: directory tree, language breakdown, entry points,
+    manifest contents (truncated), and top-level configs.
+    """
+    ignore_patterns = load_ignore_patterns()
+
+    tree_lines = []
+    ext_counts = {}
+    entry_points = []
+    manifests = {}
+    largest_files = []
+    total_files = 0
+
+    project_root = os.path.abspath(PROJECT_DIR)
+
+    for root, dirs, files in os.walk(project_root):
+        # Compute depth relative to project root
+        rel_root = os.path.relpath(root, project_root)
+        depth = 0 if rel_root == "." else rel_root.count(os.sep) + 1
+
+        # Filter ignored dirs in place so os.walk skips them
+        dirs[:] = sorted([d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)])
+
+        if depth > max_depth:
+            dirs[:] = []  # don't descend further
+            continue
+
+        # Add this directory to tree
+        if rel_root == ".":
+            tree_lines.append(f"{os.path.basename(project_root)}/")
+        else:
+            indent = "  " * depth
+            tree_lines.append(f"{indent}{os.path.basename(root)}/")
+
+        # Process files
+        kept_files = []
+        for fname in sorted(files):
+            fpath = os.path.join(root, fname)
+            if should_ignore(fpath, ignore_patterns):
+                continue
+            kept_files.append(fname)
+
+            ext = Path(fname).suffix.lower() or "<no-ext>"
+            ext_counts[ext] = ext_counts.get(ext, 0) + 1
+            total_files += 1
+
+            # Entry point detection
+            if fname in ARCH_ENTRY_POINTS:
+                entry_points.append(os.path.relpath(fpath, project_root))
+
+            # Manifest detection (read truncated content)
+            if fname in ARCH_MANIFESTS and len(manifests) < 12:
+                try:
+                    content = Path(fpath).read_text(encoding="utf-8", errors="replace")
+                    if len(content) > manifest_chars:
+                        content = content[:manifest_chars] + "\n... (truncated)"
+                    manifests[os.path.relpath(fpath, project_root)] = content
+                except Exception:
+                    pass
+
+            # Track size for largest files
+            try:
+                size = os.path.getsize(fpath)
+                largest_files.append((size, os.path.relpath(fpath, project_root)))
+            except Exception:
+                pass
+
+        # Show only first N files per directory in tree
+        for fname in kept_files[:max_files_per_dir]:
+            indent = "  " * (depth + 1)
+            tree_lines.append(f"{indent}{fname}")
+        if len(kept_files) > max_files_per_dir:
+            indent = "  " * (depth + 1)
+            tree_lines.append(f"{indent}... ({len(kept_files) - max_files_per_dir} more files)")
+
+    # Top 10 largest source files (excludes binaries by extension)
+    src_exts = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".kt", ".go", ".rs", ".rb", ".cs", ".cpp", ".c", ".h"}
+    largest_files = [(s, p) for s, p in largest_files if Path(p).suffix.lower() in src_exts]
+    largest_files.sort(reverse=True)
+    top_largest = largest_files[:10]
+
+    # Language breakdown (sorted by count)
+    lang_lines = []
+    for ext, count in sorted(ext_counts.items(), key=lambda x: -x[1])[:20]:
+        lang_lines.append(f"  {ext}: {count} files")
+
+    parts = []
+    parts.append(f"# Project: {os.path.basename(project_root)}")
+    parts.append(f"Total tracked files: {total_files}")
+    parts.append("")
+    parts.append("## Directory Tree")
+    parts.append("```")
+    parts.extend(tree_lines[:400])  # cap tree to avoid huge prompts
+    if len(tree_lines) > 400:
+        parts.append(f"... ({len(tree_lines) - 400} more lines truncated)")
+    parts.append("```")
+    parts.append("")
+    parts.append("## Language / File-Type Breakdown")
+    parts.extend(lang_lines)
+    parts.append("")
+    parts.append("## Entry Points Detected")
+    if entry_points:
+        for ep in entry_points[:20]:
+            parts.append(f"  - {ep}")
+    else:
+        parts.append("  (none detected)")
+    parts.append("")
+    parts.append("## Largest Source Files")
+    for size, path in top_largest:
+        parts.append(f"  - {path} ({size:,} bytes)")
+    parts.append("")
+    parts.append("## Manifest / Config Files")
+    for path, content in manifests.items():
+        parts.append(f"### {path}")
+        parts.append("```")
+        parts.append(content)
+        parts.append("```")
+        parts.append("")
+
+    return "\n".join(parts)
+
+
+class ArchitectureEngine:
+    """Generate an architecture critique report using OpenAI."""
+
+    def __init__(self, config):
+        self.config = config
+        self.client = openai.OpenAI()
+
+    def generate(self):
+        summary = build_architecture_summary()
+        purpose = load_purpose()
+        rules_data = load_rules() or {}
+        rules = rules_data.get("rules", {})
+
+        # Hard cap on summary length to leave room for response
+        max_summary_chars = 200000
+        if len(summary) > max_summary_chars:
+            summary = summary[:max_summary_chars] + "\n... (summary truncated)"
+
+        system_prompt = """You are RepoAgent's Principal Architecture Analyst.
+
+You are given a project's directory tree, manifests, entry points, and a stated purpose. Your job is to produce a single architecture-critique report that explains HOW the project is structured, WHAT each piece does, WHY it looks this way, whether it ALIGNS with the stated purpose, and where the architectural leaks/flaws/misalignments are.
+
+Tone: a senior architect reviewing a colleague's project. Honest, specific, constructive. Applaud what is genuinely good; critique what is genuinely off. Never invent files or modules that you cannot see in the input.
+
+Output strict Markdown with these EXACT section headers (used for parsing):
+
+## OVERVIEW
+A 3-5 sentence plain-English description of what this project does, based on the structure and manifests. State the inferred tech stack. If the inference is uncertain, say so.
+
+## ARCHITECTURE FLOW
+A Mermaid diagram (```mermaid flowchart TB ... ```) showing the major components/modules and how they relate. Use the actual folder/module names from the tree. Keep it readable — group sub-modules into subgraphs by top-level folder. Maximum 25 nodes.
+
+Then below the Mermaid block, an ASCII fallback diagram in a plain code block, in case Mermaid doesn't render.
+
+## ALIGNMENT WITH PURPOSE
+Quote 1-2 lines from purpose.md, then give a verdict: ALIGNED / PARTIALLY ALIGNED / DRIFTING / VIOLATION. Justify the verdict with specific file/module evidence.
+
+## STRENGTHS
+Bullet list. Each item: a specific architectural strength with the file/folder evidence. Be concrete (e.g. "Clear separation between `services/` and `routes/` — easy to test"). 3-6 items.
+
+## CONCERNS, FLAWS & LEAKS
+Bullet list. Each item formatted as:
+- **<Issue>** — <one-line description>
+  - WHERE: <file/folder>
+  - WHY IT MATTERS: <one sentence>
+  - HOW TO FIX: <one concrete suggestion>
+3-8 items. Prioritize structural issues over style.
+
+## RECOMMENDATIONS
+A short prioritized list (P0 / P1 / P2). Each item: one sentence on the change + one sentence on the expected benefit. Maximum 6 items.
+
+Rules:
+- Be specific. Reference actual file and folder names from the input.
+- Never fabricate. If you don't have enough evidence, say "insufficient evidence".
+- No hedging fluff. No corporate speak.
+- The report goes to the developer who built this project AND their lead.
+"""
+
+        user_content = f"""## Stated Purpose
+{purpose}
+
+## Coding Rules / Constraints
+- Max function lines: {rules.get('max_function_lines', 'not set')}
+- Max file lines: {rules.get('max_file_lines', 'not set')}
+- Forbidden imports: {', '.join(rules.get('forbidden_imports', [])) or 'none'}
+- Forbidden files: {', '.join(rules.get('forbidden_files', [])) or 'none'}
+
+## Project Structure Snapshot
+{summary}
+"""
+
+        model = self.config.get("model", "gpt-4o")
+        print(f"  Calling {model} for architecture analysis...")
+        resp = self.client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.3,
+        )
+        log_usage(model, resp.usage.prompt_tokens, resp.usage.completion_tokens, "architecture")
+        print(f"  Tokens: {resp.usage.prompt_tokens} in / {resp.usage.completion_tokens} out")
+        return resp.choices[0].message.content
+
+
+def cmd_architecture():
+    """Generate an architecture critique report for the current project."""
+    if not Path(AGENT_DIR).exists():
+        print("Error: .agent/ folder not found. Run 'python agent.py init'")
+        return
+
+    config = load_config()
+    engine = ArchitectureEngine(config)
+    report = engine.generate()
+
+    if not report:
+        print("Architecture analysis returned empty.")
+        return
+
+    print(report)
+
+    Path(REPORTS_DIR).mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    report_file = Path(REPORTS_DIR) / f"architecture_{timestamp}.md"
+    report_file.write_text(report, encoding="utf-8")
+    print(f"Architecture report saved to: {report_file}")
+
+    try:
+        upload_report_to_server(report, None, None, timestamp, report_type="architecture")
+    except Exception as e:
+        print(f"  Architecture upload skipped: {e}")
 
 
 def cmd_logs(date=None):
@@ -1738,6 +1994,9 @@ def main():
     # resume
     subparsers.add_parser("resume", help="Resume event logging")
 
+    # architecture
+    subparsers.add_parser("architecture", help="Generate architecture critique report for this project")
+
     
     args = parser.parse_args()
 
@@ -1782,6 +2041,8 @@ def main():
         cmd_pause()
     elif args.command == "resume":
         cmd_resume()
+    elif args.command == "architecture":
+        cmd_architecture()
     else:
         parser.print_help()
 

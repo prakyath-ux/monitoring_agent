@@ -521,7 +521,7 @@ with st.sidebar:
     # Navigation
     page = st.radio(
         "Navigation",
-        ["Dashboard", "Activity Logs", "Rule Violations", "Reports", "Settings"],
+        ["Dashboard", "Activity Logs", "Rule Violations", "Reports", "Architecture", "Settings"],
         label_visibility="collapsed"
     )
 
@@ -902,7 +902,58 @@ elif page == "Reports":
 
 
 # ══════════════════════════════════════════════════
-#  PAGE 5: SETTINGS
+#  PAGE 5: ARCHITECTURE
+# ══════════════════════════════════════════════════
+
+elif page == "Architecture":
+    st.header("Architecture")
+    st.caption(f"Project: {_project_name}")
+    st.markdown("---")
+
+    col_gen, _ = st.columns([1, 3])
+    with col_gen:
+        gen_arch = st.button("Generate Architecture Report", use_container_width=True, type="primary")
+
+    if gen_arch:
+        with st.spinner("Analyzing project structure... This may take a minute."):
+            output = run_agent_command("architecture")
+            st.session_state.arch_output = output
+        st.success("Architecture report generated.")
+
+    if "arch_output" in st.session_state and st.session_state.arch_output:
+        st.markdown("---")
+        st.subheader("Latest Analysis")
+        st.markdown(st.session_state.arch_output)
+
+    st.markdown("---")
+    st.subheader("Past Architecture Reports")
+
+    reports_path = Path(REPORTS_DIR)
+    if reports_path.exists():
+        arch_files = sorted(reports_path.glob("architecture_*.md"), reverse=True)
+        if arch_files:
+            for arch_file in arch_files:
+                col_name, col_view = st.columns([3, 1])
+                with col_name:
+                    st.caption(f"{arch_file.name}")
+                with col_view:
+                    if st.button("View", key=f"arch_{arch_file.name}", use_container_width=True):
+                        st.session_state.viewing_arch = arch_file.name
+
+            if "viewing_arch" in st.session_state:
+                st.markdown("---")
+                arch_path = reports_path / st.session_state.viewing_arch
+                if arch_path.exists():
+                    st.subheader(f"{st.session_state.viewing_arch}")
+                    st.markdown(arch_path.read_text(encoding="utf-8", errors="replace"))
+        else:
+            st.info("No architecture reports yet. Click Generate above.")
+    else:
+        st.info("No reports directory found. Generate your first architecture report.")
+
+
+# ══════════════════════════════════════════════════
+#  PAGE 6: SETTINGS
 # ══════════════════════════════════════════════════
 
 elif page == "Settings":

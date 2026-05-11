@@ -130,8 +130,12 @@ def get_team_for_agent(agent, teams):
                     return team_name, member.get("display_name", dev_name)
     return "Unassigned", dev_name
 
-def list_reports_for(dev_name, machine, project_name):
-    """List all reports stored for a given (dev, machine, project) combo."""
+def list_reports_for(dev_name, machine, project_name, prefix="report_"):
+    """List reports stored for a given (dev, machine, project) combo.
+
+    prefix: filter by filename prefix — "report_" for activity reports,
+            "architecture_" for architecture critiques.
+    """
     dev = _safe_path_part(dev_name)
     proj = _safe_path_part(project_name)
     machine_safe = _safe_path_part(machine)
@@ -140,7 +144,7 @@ def list_reports_for(dev_name, machine, project_name):
         return []
     files = []
     for fname in os.listdir(folder):
-        if fname.endswith(".md"):
+        if fname.endswith(".md") and fname.startswith(prefix):
             full = os.path.join(folder, fname)
             files.append({
                 "filename": fname,
@@ -179,15 +183,19 @@ class RegisterHandler(BaseHTTPRequestHandler):
                 from_d = body.get("from_date") or ""
                 to_d = body.get("to_date") or ""
                 content = body.get("content", "")
+                report_type = body.get("type", "report")
 
                 folder = os.path.join(REPORTS_DIR, f"{dev}__{machine}__{proj}")
                 os.makedirs(folder, exist_ok=True)
 
-                # Filename includes date range so leads can identify reports later
-                range_suffix = ""
-                if from_d or to_d:
-                    range_suffix = f"_{_safe_path_part(from_d)}_to_{_safe_path_part(to_d)}"
-                filename = f"report_{ts}{range_suffix}.md"
+                # Architecture reports are stand-alone snapshots — no date range needed
+                if report_type == "architecture":
+                    filename = f"architecture_{ts}.md"
+                else:
+                    range_suffix = ""
+                    if from_d or to_d:
+                        range_suffix = f"_{_safe_path_part(from_d)}_to_{_safe_path_part(to_d)}"
+                    filename = f"report_{ts}{range_suffix}.md"
 
                 with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
                     f.write(content)
@@ -579,7 +587,7 @@ if agents:
         grouped[key].append(r)
 
     # Column headers
-    h_dev, h_proj, h_machine, h_ip, h_ping, h_agent, h_link, h_hist = st.columns([2, 2, 2, 2, 2, 2, 1, 1])
+    h_dev, h_proj, h_machine, h_ip, h_ping, h_agent, h_link, h_hist, h_arch = st.columns([2, 2, 2, 2, 2, 2, 1, 1, 1])
     with h_dev:
         st.markdown("**Developer**")
     with h_proj:
@@ -596,6 +604,8 @@ if agents:
         st.markdown("**Link**")
     with h_hist:
         st.markdown("**History**")
+    with h_arch:
+        st.markdown("**Architecture**")
     st.markdown("---")
 
     if "viewing_report" not in st.session_state:
@@ -603,7 +613,7 @@ if agents:
 
     for group_key, dev_results in grouped.items():
       for idx, r in enumerate(dev_results):
-        col_dev, col_proj, col_machine, col_ip, col_ping, col_agent, col_link, col_hist = st.columns([2, 2, 2, 2, 2, 2, 1, 1])
+        col_dev, col_proj, col_machine, col_ip, col_ping, col_agent, col_link, col_hist, col_arch = st.columns([2, 2, 2, 2, 2, 2, 1, 1, 1])
 
         with col_dev:
             if idx == 0:
@@ -652,6 +662,19 @@ if agents:
                     }
             else:
                 st.markdown("—")
+        with col_arch:
+            archs = list_reports_for(r["developer"], r["machine"], r["project"], prefix="architecture_")
+            if archs:
+                arch_key = f"arch_{group_key}_{r['project']}_{idx}"
+                if st.button(f"Arch ({len(archs)})", key=arch_key, use_container_width=True):
+                    st.session_state.viewing_arch = {
+                        "dev": r["developer"],
+                        "machine": r["machine"],
+                        "project": r["project"],
+                        "selected_file": None,
+                    }
+            else:
+                st.markdown("—")
       st.markdown("---")
 
     # ── Report History Viewer ──
@@ -686,6 +709,38 @@ if agents:
                         st.markdown(f.read())
                 else:
                     st.info("Select a report from the list to view it.")
+
+    # ── Architecture Viewer ──
+    if st.session_state.get("viewing_arch"):
+        ctx = st.session_state.viewing_arch
+        st.markdown("---")
+        st.subheader(f"Architecture — {ctx['dev']} / {ctx['project']}")
+        col_close, _ = st.columns([1, 6])
+        with col_close:
+            if st.button("Close", key="close_arch"):
+                st.session_state.viewing_arch = None
+                st.rerun()
+
+        archs = list_reports_for(ctx["dev"], ctx["machine"], ctx["project"], prefix="architecture_")
+
+        if not archs:
+            st.info("No architecture reports yet for this project.")
+        else:
+            col_list, col_view = st.columns([1, 3])
+            with col_list:
+                st.markdown("**Snapshots**")
+                for rep in archs:
+                    when = datetime.fromtimestamp(rep["mtime"]).strftime("%Y-%m-%d %H:%M")
+                    if st.button(when, key=f"arch_pick_{rep['filename']}", use_container_width=True):
+                        st.session_state.viewing_arch["selected_file"] = rep["path"]
+                        st.rerun()
+            with col_view:
+                sel = ctx.get("selected_file")
+                if sel and os.path.exists(sel):
+                    with open(sel, "r", encoding="utf-8") as f:
+                        st.markdown(f.read())
+                else:
+                    st.info("Select a snapshot from the list to view it.")
 
     # ── Auto Refresh ──
     st.markdown("---")
