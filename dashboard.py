@@ -655,21 +655,43 @@ if agents:
 
     st.markdown("---")
 
-    # Sort: Running first, then Stopped, then Offline
+    # Sort: devs with any Running project on top, then devs with only Stopped, then offline-only.
+    # Within each dev's block: Running rows first, then Stopped, then Offline.
+    # All of a dev's projects stay together in one section.
+    def status_priority(r):
+        return 0 if r["dashboard"] else (1 if r["net_status"] != "offline" else 2)
+
+    def group_key_of(r):
+        # Group by dev + IP — each section represents one network endpoint,
+        # so Network status is consistent for all rows inside it. Same dev with
+        # multiple IPs (DHCP history) appears as separate sections, but they're
+        # placed consecutively by the sort below.
+        return f"{r['developer']}|{r['ip']}"
+
+    # Per-dev "best status" = lowest priority any of their projects has
+    group_best_status = {}
+    for r in results:
+        k = group_key_of(r)
+        p = status_priority(r)
+        if k not in group_best_status or p < group_best_status[k]:
+            group_best_status[k] = p
+
     def sort_key(r):
-        if r["dashboard"]:
-            return 0
-        elif r["net_status"] != "offline":
-            return 1
-        else:
-            return 2
+        # 1) The dev's best status (puts whole block in right tier)
+        # 2) Dev name (alphabetical within tier)
+        # 3) Status within the dev (Running first, Stopped, Offline)
+        # 4) Project name (stable order within status)
+        return (group_best_status[group_key_of(r)],
+                r['developer'].lower(),
+                status_priority(r),
+                r.get('project',''))
     results.sort(key=sort_key)
 
-    # Group by machine (dev_name + machine combo to avoid merging different devs with same username)
+    # Group by dev + IP (collapse different machine-name strings for the same dev+IP)
     from collections import OrderedDict
     grouped = OrderedDict()
     for r in results:
-        key = f"{r['developer']}|{r['machine']}|{r['ip']}"
+        key = group_key_of(r)
         if key not in grouped:
             grouped[key] = []
         grouped[key].append(r)
