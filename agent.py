@@ -1194,10 +1194,83 @@ def start_system_heartbeat():
         pass
 
 
+def _pid_is_alive(pid):
+    """Return True if the given PID is still a running process."""
+    try:
+        if IS_WINDOWS:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            return str(pid) in result.stdout
+        else:
+            os.kill(pid, 0)
+            return True
+    except Exception:
+        return False
+
+
+def ensure_system_heartbeat_alive():
+    """Watchdog: if the system heartbeat process has died, respawn it.
+
+    Called from the main loop. Only acts when the heartbeat is actually dead —
+    a healthy heartbeat is never touched. Idempotent and safe.
+    """
+    agent_home = Path(__file__).resolve().parent
+    pid_file = agent_home / ".system_heartbeat_pid"
+    heartbeat_script = agent_home / "scripts" / "heartbeat.py"
+    if not heartbeat_script.exists():
+        return
+    # If PID file exists and process is alive, do nothing
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text(encoding="utf-8").strip())
+            if _pid_is_alive(pid):
+                return
+        except Exception:
+            pass
+    # Heartbeat is dead — respawn (use the kill-and-spawn helper for safety)
+    start_system_heartbeat()
+
+
+def ensure_linger_enabled():
+    """On Linux, enable systemd user `linger` so the agent service survives logout/reboot.
+
+    Idempotent: checks first, only acts if not already enabled. Silently fails if
+    no passwordless sudo — that's the best we can do without admin help.
+    """
+    if IS_WINDOWS:
+        return
+    if sys.platform == "darwin":
+        return
+    try:
+        user = os.environ.get("USER") or os.environ.get("USERNAME") or ""
+        if not user:
+            return
+        # Check if linger already enabled
+        result = subprocess.run(
+            ["loginctl", "show-user", user, "-p", "Linger"],
+            capture_output=True, text=True, timeout=5
+        )
+        if "Linger=yes" in (result.stdout or ""):
+            return  # already configured
+        # Try to enable. -n means non-interactive; if no passwordless sudo, fails silently.
+        subprocess.run(
+            ["sudo", "-n", "loginctl", "enable-linger", user],
+            capture_output=True, timeout=10
+        )
+    except Exception:
+        pass
+
+
 def cmd_start():
     """Start the file watcher in background"""
     # Self-heal missing config files
     ensure_agent_files()
+
+    # Best-effort: enable systemd user linger on Linux so service survives logout
+    ensure_linger_enabled()
 
     # Start system heartbeat (independent of IDE)
     start_system_heartbeat()
@@ -1269,6 +1342,8 @@ def cmd_start():
     pull_interval = 2 * 60  # 2 minutes (faster propagation during active development)
     last_pid_touch = time.time()
     pid_touch_interval = 60  # touch PID file every minute as a heartbeat
+    last_hb_check = time.time()
+    hb_check_interval = 60  # watchdog: revive system heartbeat if it dies
 
     try:
         while True:
@@ -1278,6 +1353,13 @@ def cmd_start():
                 last_pid_touch = time.time()
                 try:
                     Path(PID_FILE).write_text(str(os.getpid()), encoding="utf-8")
+                except Exception:
+                    pass
+            # Watchdog: revive system heartbeat if its process has died
+            if time.time() - last_hb_check >= hb_check_interval:
+                last_hb_check = time.time()
+                try:
+                    ensure_system_heartbeat_alive()
                 except Exception:
                     pass
             if time.time() - last_pull >= pull_interval:
