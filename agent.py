@@ -1576,7 +1576,7 @@ def _extract_py_signatures(source):
     return out[:30]  # cap output
 
 
-def build_architecture_summary(max_depth=4, max_files_per_dir=20,
+def build_architecture_summary(max_depth=10, max_files_per_dir=20,
                                 manifest_chars=2000,
                                 code_sample_lines=80,
                                 code_max_files=30,
