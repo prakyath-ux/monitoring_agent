@@ -1313,12 +1313,28 @@ def cmd_start():
         except Exception:
             pass
 
-    # Check if already running
+    # Check if already running — but auto-clear stale PID files so the Start
+    # button in the per-dev Streamlit isn't blocked by a leftover .pid from a
+    # crashed agent. The running agent touches .pid every 60s, so a mtime
+    # older than 5 min means it died and nobody cleared up after it.
     if Path(PID_FILE).exists():
-        pid = int(Path(PID_FILE).read_text(encoding="utf-8", errors="replace"))
-        if is_pid_alive(pid):
-            print(f"Agent already running (PID: {pid})")
-            return
+        try:
+            pid_age = time.time() - Path(PID_FILE).stat().st_mtime
+        except Exception:
+            pid_age = 0
+        if pid_age > 300:  # 5 minutes
+            print(f"Stale PID file detected (last touched {int(pid_age)}s ago). Clearing.")
+            Path(PID_FILE).unlink(missing_ok=True)
+        else:
+            try:
+                pid = int(Path(PID_FILE).read_text(encoding="utf-8", errors="replace").strip())
+                if is_pid_alive(pid):
+                    print(f"Agent already running (PID: {pid})")
+                    return
+            except Exception:
+                pass
+            # PID file is fresh but process is dead — clear and start fresh
+            Path(PID_FILE).unlink(missing_ok=True)
     
     # Check if .agent/ exists
     if not Path(AGENT_DIR).exists():
