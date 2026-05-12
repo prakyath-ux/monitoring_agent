@@ -44,10 +44,16 @@ _MERMAID_BARE = _re_for_safe.compile(
     _re_for_safe.MULTILINE,
 )
 _MERMAID_SUBGRAPH = _re_for_safe.compile(r'^(\s*subgraph\s+)([^\n]+)$', _re_for_safe.MULTILINE)
+_MERMAID_BRACKET_LABEL = _re_for_safe.compile(r'(\w[\w\d]*)\[([^\[\]\n]+?)\]')
 
 def _sanitize_mermaid(content):
-    """Quote subgraph names containing hyphens/dots/spaces so Mermaid can parse."""
-    def _fix(m):
+    """Make LLM-generated Mermaid robust against common parse errors.
+
+    1. Quote subgraph names containing hyphens/dots/spaces.
+    2. Quote node labels in [brackets] that contain parens/commas/etc.,
+       which Mermaid otherwise treats as alternate node-shape syntax.
+    """
+    def _fix_subgraph(m):
         prefix = m.group(1)
         name = m.group(2).strip()
         if not name or name.startswith('"') or name.startswith("'"):
@@ -55,7 +61,20 @@ def _sanitize_mermaid(content):
         if _re_for_safe.search(r'[-.\s]', name):
             return f'{prefix}"{name}"'
         return m.group(0)
-    return _MERMAID_SUBGRAPH.sub(_fix, content)
+    content = _MERMAID_SUBGRAPH.sub(_fix_subgraph, content)
+
+    def _fix_label(m):
+        ident = m.group(1)
+        label = m.group(2)
+        if label.startswith('"') or label.startswith("'"):
+            return m.group(0)
+        if any(c in label for c in '(){}<>'):
+            escaped = label.replace('"', '#quot;')
+            return f'{ident}["{escaped}"]'
+        return m.group(0)
+    content = _MERMAID_BRACKET_LABEL.sub(_fix_label, content)
+
+    return content
 
 def _render_mermaid_via_api(content):
     """Render a Mermaid block by calling mermaid.render() programmatically.

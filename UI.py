@@ -27,10 +27,18 @@ _MERMAID_BARE = re.compile(
     re.MULTILINE,
 )
 _MERMAID_SUBGRAPH = re.compile(r'^(\s*subgraph\s+)([^\n]+)$', re.MULTILINE)
+# Matches `Identifier[label content]` — single brackets, no nested brackets
+_MERMAID_BRACKET_LABEL = re.compile(r'(\w[\w\d]*)\[([^\[\]\n]+?)\]')
 
 def _sanitize_mermaid(content):
-    """Quote subgraph names containing hyphens/dots/spaces so Mermaid can parse."""
-    def _fix(m):
+    """Make LLM-generated Mermaid robust against common parse errors.
+
+    1. Quote subgraph names containing hyphens/dots/spaces.
+    2. Quote node labels in [brackets] that contain parens/commas/etc.,
+       which Mermaid otherwise treats as alternate node-shape syntax.
+    """
+    # Subgraph names
+    def _fix_subgraph(m):
         prefix = m.group(1)
         name = m.group(2).strip()
         if not name or name.startswith('"') or name.startswith("'"):
@@ -38,7 +46,23 @@ def _sanitize_mermaid(content):
         if re.search(r'[-.\s]', name):
             return f'{prefix}"{name}"'
         return m.group(0)
-    return _MERMAID_SUBGRAPH.sub(_fix, content)
+    content = _MERMAID_SUBGRAPH.sub(_fix_subgraph, content)
+
+    # Node labels: A[stuff with (parens) or, commas] -> A["stuff with (parens) or, commas"]
+    def _fix_label(m):
+        ident = m.group(1)
+        label = m.group(2)
+        # Already quoted?
+        if label.startswith('"') or label.startswith("'"):
+            return m.group(0)
+        # Contains chars Mermaid treats as syntax inside brackets?
+        if any(c in label for c in '(){}<>'):
+            escaped = label.replace('"', '#quot;')
+            return f'{ident}["{escaped}"]'
+        return m.group(0)
+    content = _MERMAID_BRACKET_LABEL.sub(_fix_label, content)
+
+    return content
 
 def _render_mermaid_via_api(content):
     """Render a Mermaid block via mermaid.render(). On parse error, the iframe

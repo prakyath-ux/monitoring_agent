@@ -1918,7 +1918,8 @@ flowchart TB
 MERMAID SYNTAX RULES (failing these breaks rendering):
 - Node IDs must be alphanumeric only (A, B, Node1, ServiceA). NO hyphens, dots, slashes, or spaces in IDs.
 - Subgraph names with hyphens, dots, slashes, or spaces MUST be wrapped in double quotes. Correct: `subgraph "iform-service"`. Wrong: `subgraph iform-service`.
-- Labels inside square brackets [...] can contain any characters — use brackets for the human-readable name.
+- **If a node label contains parentheses, commas, slashes, or angle brackets, wrap the ENTIRE label in double quotes.** Mermaid treats unquoted parens as a different node shape. Correct: `Service["Order Service (handles orders, returns)"]`. Wrong: `Service[Order Service (handles orders, returns)]`. Wrong: `App[App.jsx (Next.js app shell)]`.
+- For multi-line labels, use `\n` inside the quoted label: `A["Line one\nLine two"]`.
 
 Do NOT include an ASCII tree version. Do NOT just list folders. The system renders the Mermaid block as an actual visual diagram.
 
