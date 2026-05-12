@@ -62,6 +62,12 @@ def _sanitize_mermaid(content):
         return m.group(0)
     content = _MERMAID_BRACKET_LABEL.sub(_fix_label, content)
 
+    # Strip classDef + class-application styling directives.
+    # They're decorative-only, the renderer applies its own theme, and the LLM
+    # often gets the syntax wrong (e.g. `fill=none` instead of `fill:none`).
+    content = re.sub(r'(?m)^\s*classDef\b.*$\n?', '', content)
+    content = re.sub(r'(?m)^\s*class\s+\w[\w,\s]*\s+\w+\s*;?\s*$\n?', '', content)
+
     return content
 
 def _render_mermaid_via_api(content):

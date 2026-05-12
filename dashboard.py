@@ -74,6 +74,10 @@ def _sanitize_mermaid(content):
         return m.group(0)
     content = _MERMAID_BRACKET_LABEL.sub(_fix_label, content)
 
+    # Strip classDef + class-application styling directives.
+    content = _re_for_safe.sub(r'(?m)^\s*classDef\b.*$\n?', '', content)
+    content = _re_for_safe.sub(r'(?m)^\s*class\s+\w[\w,\s]*\s+\w+\s*;?\s*$\n?', '', content)
+
     return content
 
 def _render_mermaid_via_api(content):

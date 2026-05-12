@@ -1920,6 +1920,7 @@ MERMAID SYNTAX RULES (failing these breaks rendering):
 - Subgraph names with hyphens, dots, slashes, or spaces MUST be wrapped in double quotes. Correct: `subgraph "iform-service"`. Wrong: `subgraph iform-service`.
 - **If a node label contains parentheses, commas, slashes, or angle brackets, wrap the ENTIRE label in double quotes.** Mermaid treats unquoted parens as a different node shape. Correct: `Service["Order Service (handles orders, returns)"]`. Wrong: `Service[Order Service (handles orders, returns)]`. Wrong: `App[App.jsx (Next.js app shell)]`.
 - For multi-line labels, use `\n` inside the quoted label: `A["Line one\nLine two"]`.
+- **Do NOT use `classDef` or `class` styling directives.** The renderer applies its own visual theme. Adding `classDef` is unnecessary and often introduces parse errors.
 
 Do NOT include an ASCII tree version. Do NOT just list folders. The system renders the Mermaid block as an actual visual diagram.
 
