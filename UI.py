@@ -44,29 +44,59 @@ def _render_mermaid_via_api(content):
     """Render a Mermaid block via mermaid.render(). On parse error, the iframe
     shows the actual error message + source for debugging.
     """
-    container_id = f"mm-{_arch_uuid.uuid4().hex[:8]}"
+    cid = _arch_uuid.uuid4().hex[:8]
     src_js = _arch_json.dumps(content)
     html = f"""
-    <div id="{container_id}" style="background:white;padding:20px;border-radius:8px;min-height:300px;overflow:auto;"></div>
+    <div id="wrap-{cid}" style="position:relative;background:white;border:1px solid #ddd;border-radius:8px;height:720px;overflow:hidden;">
+      <div style="position:absolute;top:10px;right:10px;z-index:10;display:flex;gap:4px;font-family:system-ui;">
+        <button id="zi-{cid}" title="Zoom in" style="background:white;border:1px solid #ccc;padding:4px 10px;cursor:pointer;font-size:16px;border-radius:4px;line-height:1;">+</button>
+        <button id="zo-{cid}" title="Zoom out" style="background:white;border:1px solid #ccc;padding:4px 10px;cursor:pointer;font-size:16px;border-radius:4px;line-height:1;">−</button>
+        <button id="zr-{cid}" title="Reset / fit" style="background:white;border:1px solid #ccc;padding:4px 8px;cursor:pointer;font-size:13px;border-radius:4px;">Fit</button>
+        <button id="fs-{cid}" title="Toggle fullscreen" style="background:white;border:1px solid #ccc;padding:4px 8px;cursor:pointer;font-size:13px;border-radius:4px;">Full</button>
+      </div>
+      <div id="svg-{cid}" style="width:100%;height:100%;cursor:grab;"></div>
+    </div>
     <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({{ startOnLoad: false, theme: 'default', securityLevel: 'loose' }});
+      mermaid.initialize({{ startOnLoad: false, theme: 'default', securityLevel: 'loose', maxTextSize: 100000 }});
       const src = {src_js};
       try {{
-        const {{ svg }} = await mermaid.render('g-{container_id}', src);
-        document.getElementById('{container_id}').innerHTML = svg;
+        const {{ svg }} = await mermaid.render('g-{cid}', src);
+        const host = document.getElementById('svg-{cid}');
+        host.innerHTML = svg;
+        const svgEl = host.querySelector('svg');
+        if (svgEl) {{
+          svgEl.setAttribute('width', '100%');
+          svgEl.setAttribute('height', '100%');
+          svgEl.style.maxWidth = 'none';
+          const pzScript = document.createElement('script');
+          pzScript.src = 'https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js';
+          pzScript.onload = () => {{
+            const pz = svgPanZoom(svgEl, {{
+              zoomEnabled: true, controlIconsEnabled: false, fit: true, center: true,
+              minZoom: 0.2, maxZoom: 10, dblClickZoomEnabled: false,
+            }});
+            document.getElementById('zi-{cid}').addEventListener('click', () => pz.zoomIn());
+            document.getElementById('zo-{cid}').addEventListener('click', () => pz.zoomOut());
+            document.getElementById('zr-{cid}').addEventListener('click', () => {{ pz.resize(); pz.fit(); pz.center(); }});
+          }};
+          document.head.appendChild(pzScript);
+        }}
+        document.getElementById('fs-{cid}').addEventListener('click', () => {{
+          const wrap = document.getElementById('wrap-{cid}');
+          if (!document.fullscreenElement) {{ wrap.requestFullscreen && wrap.requestFullscreen(); }}
+          else {{ document.exitFullscreen(); }}
+        }});
       }} catch (e) {{
         const msg = (e && e.message) ? e.message : String(e);
-        document.getElementById('{container_id}').innerHTML =
-          '<div style="color:#c00;font-family:system-ui;margin-bottom:10px;"><b>Mermaid render failed:</b><br>' +
+        document.getElementById('svg-{cid}').innerHTML =
+          '<div style="color:#c00;font-family:system-ui;margin:20px;"><b>Mermaid render failed:</b><br>' +
           msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-          '</div><pre style="background:#fee;padding:10px;border-radius:4px;white-space:pre-wrap;font-size:12px;">' +
-          src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-          '</pre>';
+          '</div>';
       }}
     </script>
     """
-    _arch_components.html(html, height=550, scrolling=True)
+    _arch_components.html(html, height=780, scrolling=False)
 
 def render_architecture_markdown(md_text):
     """Render markdown, converting mermaid blocks into rendered diagrams.
