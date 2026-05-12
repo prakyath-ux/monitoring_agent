@@ -1884,9 +1884,12 @@ How to reason before drawing:
 REQUIREMENTS for the diagram (any of these failing means the diagram is unacceptable):
 - **Every node MUST have at least one edge (incoming or outgoing).** Disconnected nodes are forbidden. If you cannot connect a node, drop it.
 - **Use directed arrows `-->` to show direction of calls / data flow / dependencies.** Label edges when the relationship is non-obvious, e.g. `Service -->|reads/writes| DB`.
-- Group internal modules into subgraphs by top-level folder; put external services in a separate subgraph (e.g. `subgraph External`).
-- 6–20 nodes is the sweet spot. Hard maximum 25.
-- Prefer fewer, meaningful nodes over many granular ones. Collapse trivial sub-folders into their parent.
+- **Hard maximum 12 nodes.** Sweet spot 6–10. A readable diagram beats a complete one.
+- **Group by ARCHITECTURAL LAYER, not by folder.** Use these layer subgraphs when applicable: `subgraph Presentation` (controllers, routes, UI), `subgraph Business` (services, use cases, domain logic), `subgraph Data` (repositories, ORM, DAOs), `subgraph External` (DBs, queues, third-party APIs, auth providers).
+- **Aggressively collapse similar items into ONE labeled node.** Instead of drawing 5 separate controllers, draw ONE node labeled `OrderControllers [Order, Cart, Payment, Shipping, Status]`. Instead of 8 service classes, draw one `Order Services [several services]` node.
+- **Prefer top-down hierarchical flow.** Direction `TB` (top-to-bottom). A typical flow: top layer (entry) → middle layer (services) → bottom layer (data + external).
+- **No layer-skipping shortcuts.** A Controller should not have an arrow directly to a DB. The path goes Controller → Service → Repository → DB.
+- **Aim for clarity, not completeness.** Drop nodes that don't show in the architectural story. Junior engineers should be able to read this diagram in 30 seconds.
 
 CRITICAL FORMAT — the diagram MUST be wrapped in a fenced code block tagged `mermaid`:
 

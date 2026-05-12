@@ -80,7 +80,20 @@ def _render_mermaid_via_api(content):
     </details>
     <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({{ startOnLoad: false, theme: 'default', securityLevel: 'loose', maxTextSize: 100000 }});
+      mermaid.initialize({{
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+        maxTextSize: 100000,
+        flowchart: {{
+          nodeSpacing: 80,
+          rankSpacing: 110,
+          useMaxWidth: false,
+          htmlLabels: true,
+          curve: 'basis',
+          padding: 20,
+        }},
+      }});
       const src = {src_js};
       document.getElementById('dbg-{cid}').textContent = '[length=' + src.length + ']\\n' + src;
       try {{

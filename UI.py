@@ -58,7 +58,20 @@ def _render_mermaid_via_api(content):
     </div>
     <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({{ startOnLoad: false, theme: 'default', securityLevel: 'loose', maxTextSize: 100000 }});
+      mermaid.initialize({{
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+        maxTextSize: 100000,
+        flowchart: {{
+          nodeSpacing: 80,
+          rankSpacing: 110,
+          useMaxWidth: false,
+          htmlLabels: true,
+          curve: 'basis',
+          padding: 20,
+        }},
+      }});
       const src = {src_js};
       try {{
         const {{ svg }} = await mermaid.render('g-{cid}', src);
