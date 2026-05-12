@@ -180,6 +180,7 @@ USAGE_FILE = os.path.join(AGENT_DIR, "usage", "usage.json")
 PURPOSE_FILE = os.path.join(AGENT_DIR, "purpose.md")
 RULES_FILE = os.path.join(AGENT_DIR, "rules.yaml")
 CONFIG_FILE = os.path.join(AGENT_DIR, "config.yaml")
+STANDARDS_FILE = os.path.join(AGENT_DIR, "standards.md")
 
 # ── Custom CSS ──
 st.markdown("""
@@ -1136,7 +1137,7 @@ elif page == "Settings":
     st.header("Settings")
     st.markdown("---")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Config", "Rules", "Purpose", "API Usage"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Config", "Rules", "Purpose", "Standards", "API Usage"])
 
     # Config tab
     with tab1:
@@ -1148,8 +1149,12 @@ elif page == "Settings":
                 with col_save:
                     if st.button("Save", key="save_config", use_container_width=True):
                         config_path.write_text(config_content)
+                        synced = _push_project_config("config.yaml", config_content)
                         st.session_state.edit_config = False
-                        st.success("Config saved")
+                        if synced:
+                            st.success("Config saved (synced to team)")
+                        else:
+                            st.warning("Config saved locally. Central sync failed — teammates will not see this change until next save.")
                         st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key="cancel_config", use_container_width=True):
@@ -1173,8 +1178,12 @@ elif page == "Settings":
                 with col_save:
                     if st.button("Save", key="save_rules", use_container_width=True):
                         rules_path.write_text(rules_content)
+                        synced = _push_project_config("rules.yaml", rules_content)
                         st.session_state.edit_rules = False
-                        st.success("Rules saved")
+                        if synced:
+                            st.success("Rules saved (synced to team)")
+                        else:
+                            st.warning("Rules saved locally. Central sync failed — teammates will not see this change until next save.")
                         st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key="cancel_rules", use_container_width=True):
@@ -1217,8 +1226,37 @@ elif page == "Settings":
         else:
             st.warning("purpose.md not found. Run `python agent.py init`")
 
-    # Usage tab
+    # Standards tab
     with tab4:
+        standards_path = Path(STANDARDS_FILE)
+        if standards_path.exists():
+            if st.session_state.get("edit_standards"):
+                standards_content = st.text_area("standards.md", standards_path.read_text(encoding="utf-8", errors="replace"), height=400, key="standards_editor")
+                col_save, col_cancel, _ = st.columns([1, 1, 4])
+                with col_save:
+                    if st.button("Save", key="save_standards", use_container_width=True):
+                        standards_path.write_text(standards_content)
+                        synced = _push_project_config("standards.md", standards_content)
+                        st.session_state.edit_standards = False
+                        if synced:
+                            st.success("Standards saved (synced to team)")
+                        else:
+                            st.warning("Standards saved locally. Central sync failed — teammates will not see this change until next save.")
+                        st.rerun()
+                with col_cancel:
+                    if st.button("Cancel", key="cancel_standards", use_container_width=True):
+                        st.session_state.edit_standards = False
+                        st.rerun()
+            else:
+                st.markdown(standards_path.read_text(encoding="utf-8", errors="replace"))
+                if st.button("Edit", key="edit_standards_btn"):
+                    st.session_state.edit_standards = True
+                    st.rerun()
+        else:
+            st.warning("standards.md not found. Run `python agent.py init`")
+
+    # Usage tab
+    with tab5:
         usage = load_usage()
 
         col1, col2 = st.columns(2)

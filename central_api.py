@@ -32,9 +32,13 @@ REPORTS_DIR = os.path.join(HERE, "reports")
 PROJECT_CONFIGS_DIR = os.path.join(HERE, "project_configs")
 ENV_FILE = os.path.join(HERE, ".env")
 
-# Whitelist of project-config files that may be pushed/fetched. Adding more
-# is a one-line change once purpose.md is proven to work end-to-end.
-PROJECT_CONFIG_ALLOWED_FILES = {"purpose.md"}
+# Whitelist of project-config files that may be pushed/fetched.
+PROJECT_CONFIG_ALLOWED_FILES = {
+    "purpose.md",
+    "rules.yaml",
+    "config.yaml",
+    "standards.md",
+}
 
 
 def _safe_path_part(s):

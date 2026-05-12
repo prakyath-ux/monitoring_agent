@@ -1241,9 +1241,11 @@ def ensure_linger_enabled():
 
 PROJECT_CONFIG_FETCH_URL = "http://172.16.0.146:5000/project-config"
 # Whitelist mirrors the server-side PROJECT_CONFIG_ALLOWED_FILES in central_api.py.
-# Only purpose.md for now; add more files to both sides when ready.
 _PROJECT_CONFIG_FILES = {
     "purpose.md": PURPOSE_FILE,
+    "rules.yaml": RULES_FILE,
+    "config.yaml": CONFIG_FILE,
+    "standards.md": STANDARDS_FILE,
 }
 
 
