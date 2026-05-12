@@ -559,6 +559,28 @@ import requests
 
 #GSHEET_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
 REGISTER_URL = "http://172.16.0.146:5000/register"
+PROJECT_CONFIG_URL = "http://172.16.0.146:5000/project-config"
+
+
+def _push_project_config(file_name, content):
+    """Push an edited config file (currently only purpose.md) to the central
+    server so all other devs working on the same project_name sync to it.
+    Silent fail — local save still succeeded; only the team-sync is missed.
+    Returns True on success, False otherwise (caller can warn the user).
+    """
+    try:
+        r = requests.post(
+            PROJECT_CONFIG_URL,
+            json={
+                "project_name": _project_name,
+                "file_name": file_name,
+                "content": content,
+            },
+            timeout=5,
+        )
+        return r.status_code == 200
+    except Exception:
+        return False
 
 def register_instance():
     """Register this dashboard instance in the shared Google Sheet"""
@@ -1176,8 +1198,12 @@ elif page == "Settings":
                 with col_save:
                     if st.button("Save", key="save_purpose", use_container_width=True):
                         purpose_path.write_text(purpose_content)
+                        synced = _push_project_config("purpose.md", purpose_content)
                         st.session_state.edit_purpose = False
-                        st.success("Purpose saved")
+                        if synced:
+                            st.success("Purpose saved (synced to team)")
+                        else:
+                            st.warning("Purpose saved locally. Central sync failed — teammates will not see this change until next save.")
                         st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key="cancel_purpose", use_container_width=True):

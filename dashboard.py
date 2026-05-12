@@ -2,13 +2,10 @@ import streamlit as st
 import subprocess
 import platform
 import requests
-import socket
 import time
 from datetime import datetime
 import json
-import os 
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import os
 
 # ----- Page Config --------#
 st.set_page_config(
@@ -317,117 +314,12 @@ def save_agents(agents):
     with open(AGENT_FILE, "w") as f:
         json.dump(agents, f, indent=2)
 
-class RegisterHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length)
-        try:
-            body = json.loads(raw)
-        except Exception:
-            self.send_response(400)
-            self.end_headers()
-            self.wfile.write(b"Invalid JSON")
-            return
-
-        # Report upload — separate path
-        if self.path == "/upload-report":
-            try:
-                dev = _safe_path_part(body.get("dev_name", ""))
-                proj = _safe_path_part(body.get("project_name", ""))
-                machine = _safe_path_part(body.get("machine", ""))
-                ts = _safe_path_part(body.get("timestamp", datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
-                from_d = body.get("from_date") or ""
-                to_d = body.get("to_date") or ""
-                content = body.get("content", "")
-                report_type = body.get("type", "report")
-
-                folder = os.path.join(REPORTS_DIR, f"{dev}__{machine}__{proj}")
-                os.makedirs(folder, exist_ok=True)
-
-                # Architecture reports are stand-alone snapshots — no date range needed
-                if report_type == "architecture":
-                    filename = f"architecture_{ts}.md"
-                else:
-                    range_suffix = ""
-                    if from_d or to_d:
-                        range_suffix = f"_{_safe_path_part(from_d)}_to_{_safe_path_part(to_d)}"
-                    filename = f"report_{ts}{range_suffix}.md"
-
-                with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
-                    f.write(content)
-
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"OK")
-            except Exception as e:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(f"Error: {e}".encode())
-            return
-
-        # Reject junk project names
-        blocked = ['.agent-monitor', '.Trash', '.trash', 'untitled', 'pycharm_agent_test',
-                   'test-project_port_collision', '.agent']
-        project_name = body.get("project_name", "")
-        if project_name in blocked or project_name.startswith("."):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"SKIP")
-            return
-
-        agents = load_agents()
-        # Deduplicate by dev_name + project_name
-        key = (body.get("dev_name", "").lower(), body.get("project_name", "").lower())
-        agents = [a for a in agents if (a.get("dev_name", "").lower(), a.get("project_name", "").lower()) != key]
-        body["registered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        agents.append(body)
-        save_agents(agents)
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-    def do_GET(self):
-        # Serve .env keys at /env path — only to local network
-        if self.path == "/env":
-            client_ip = self.client_address[0]
-            if not (client_ip.startswith("10.0.") or client_ip.startswith("172.16.") or client_ip == "127.0.0.1"):
-                self.send_response(403)
-                self.end_headers()
-                self.wfile.write(b"Forbidden")
-                return
-            env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-            if os.path.exists(env_file):
-                with open(env_file, "r") as f:
-                    content = f.read()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(content.encode())
-            else:
-                self.send_response(404)
-                self.end_headers()
-                self.wfile.write(b"No .env found")
-            return
-
-        agents = load_agents()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(agents).encode())
-
-    def log_message(self, format, *args):
-        pass # Suppress console logs
-
-def start_api():
-    server = HTTPServer(("0.0.0.0", API_PORT), RegisterHandler)
-    server.serve_forever()
-
-def is_port_in_use(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-if not is_port_in_use(API_PORT):
-    threading.Thread(target=start_api, daemon=True).start()
+# HTTP API (POST /register, POST /upload-report, POST /project-config,
+# GET /, GET /env, GET /project-config) has moved to central_api.py — a
+# separate process on this same server that listens on port 5000.
+# This file now only renders the Streamlit dashboard UI on port 8503 and
+# reads from the same on-disk files (agents.json, reports/) that
+# central_api.py writes to.
 
 @st.cache_data(ttl=60, show_spinner=False)
 def check_agent_network(ip, url):

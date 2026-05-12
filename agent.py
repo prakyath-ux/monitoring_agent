@@ -1239,10 +1239,59 @@ def ensure_linger_enabled():
         pass
 
 
+PROJECT_CONFIG_FETCH_URL = "http://172.16.0.146:5000/project-config"
+# Whitelist mirrors the server-side PROJECT_CONFIG_ALLOWED_FILES in central_api.py.
+# Only purpose.md for now; add more files to both sides when ready.
+_PROJECT_CONFIG_FILES = {
+    "purpose.md": PURPOSE_FILE,
+}
+
+
+def fetch_project_configs():
+    """Pull the team-authoritative copy of purpose.md (and any other whitelisted
+    file) for THIS project from the central server. Overwrites the local file
+    only if the server's mtime is strictly newer than the local one. Silent on
+    network failure — server may be down, transient, or doesn't yet have a
+    version for this project.
+
+    Runs at agent start and during the periodic auto-pull cycle so teammates
+    on the same project_name converge to a single source of truth shortly
+    after any edit.
+    """
+    from urllib.request import urlopen
+    from urllib.parse import quote
+    project_name = os.path.basename(PROJECT_DIR)
+    if not project_name:
+        return
+    for file_name, local_path in _PROJECT_CONFIG_FILES.items():
+        try:
+            url = (
+                f"{PROJECT_CONFIG_FETCH_URL}"
+                f"?project={quote(project_name)}&file={quote(file_name)}"
+            )
+            with urlopen(url, timeout=5) as resp:
+                if resp.status != 200:
+                    continue
+                data = json.loads(resp.read().decode("utf-8"))
+            server_content = data.get("content", "")
+            server_mtime = int(data.get("mtime", 0))
+            local_p = Path(local_path)
+            local_mtime = int(local_p.stat().st_mtime) if local_p.exists() else 0
+            if server_mtime > local_mtime:
+                local_p.parent.mkdir(parents=True, exist_ok=True)
+                local_p.write_text(server_content, encoding="utf-8")
+        except Exception:
+            continue
+
+
 def cmd_start():
     """Start the file watcher in background"""
     # Self-heal missing config files
     ensure_agent_files()
+
+    # Pull team-authoritative configs (currently just purpose.md) so all devs
+    # working on the same project converge on the lead's latest intent.
+    fetch_project_configs()
 
     # Best-effort: enable systemd user linger on Linux so service survives logout
     ensure_linger_enabled()
@@ -1339,6 +1388,12 @@ def cmd_start():
                     pass
             if time.time() - last_pull >= pull_interval:
                 last_pull = time.time()
+                # Pull team-authoritative project configs (purpose.md, etc.)
+                # from central. Last-write-wins by mtime; silent on network err.
+                try:
+                    fetch_project_configs()
+                except Exception:
+                    pass
                 agent_home = Path(__file__).resolve().parent
                 if (agent_home / ".git").exists():
                     try:
