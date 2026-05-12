@@ -1558,7 +1558,11 @@ def upload_report_to_server(report_content, from_date, to_date, timestamp, repor
 
     project_name = os.path.basename(PROJECT_DIR)
     dev_name = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-    machine = os.uname().nodename if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "unknown")
+    # socket.gethostname() works on Linux, macOS, and Windows without depending
+    # on env vars (COMPUTERNAME isn't always present in agent.py's environment,
+    # which previously produced "unknown" machine fields in upload paths).
+    import socket as _sock
+    machine = _sock.gethostname() or "unknown"
 
     payload = {
         "type": report_type,

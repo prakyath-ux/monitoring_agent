@@ -284,27 +284,49 @@ def get_team_for_agent(agent, teams):
     return "Unassigned", dev_name
 
 def list_reports_for(dev_name, machine, project_name, prefix="report_"):
-    """List reports stored for a given (dev, machine, project) combo.
+    """List reports stored for (dev, project), tolerant of machine drift.
 
-    prefix: filter by filename prefix — "report_" for activity reports,
-            "architecture_" for architecture critiques.
+    Originally we required an exact <dev>__<machine>__<project> folder name,
+    but on some dev machines (Windows where COMPUTERNAME env isn't set in
+    agent.py's environment) the upload's machine field ended up as "unknown".
+    The dashboard's heartbeat-side knows the real machine ("subha", "Deepali",
+    etc.) so the strict match silently hid those reports.
+
+    Loose match: any folder whose first segment (dev) and last segment (project)
+    match — irrespective of the middle (machine) segment. Aggregates files
+    across all matching folders so reports uploaded with different machine
+    spellings still appear in one list.
+
+    prefix: "report_" for activity reports, "architecture_" for architecture
+            critiques.
     """
-    dev = _safe_path_part(dev_name)
-    proj = _safe_path_part(project_name)
-    machine_safe = _safe_path_part(machine)
-    folder = os.path.join(REPORTS_DIR, f"{dev}__{machine_safe}__{proj}")
-    if not os.path.exists(folder):
+    if not os.path.exists(REPORTS_DIR):
         return []
+    target_dev = _safe_path_part(dev_name).lower()
+    target_proj = _safe_path_part(project_name).lower()
+
     files = []
-    for fname in os.listdir(folder):
-        if fname.endswith(".md") and fname.startswith(prefix):
-            full = os.path.join(folder, fname)
-            files.append({
-                "filename": fname,
-                "path": full,
-                "size": os.path.getsize(full),
-                "mtime": os.path.getmtime(full),
-            })
+    for folder_name in os.listdir(REPORTS_DIR):
+        folder_path = os.path.join(REPORTS_DIR, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+        # Folder format: <dev>__<machine>__<project>
+        parts = folder_name.split("__")
+        if len(parts) < 3:
+            continue
+        folder_dev = parts[0].lower()
+        folder_proj = parts[-1].lower()
+        if folder_dev != target_dev or folder_proj != target_proj:
+            continue
+        for fname in os.listdir(folder_path):
+            if fname.endswith(".md") and fname.startswith(prefix):
+                full = os.path.join(folder_path, fname)
+                files.append({
+                    "filename": fname,
+                    "path": full,
+                    "size": os.path.getsize(full),
+                    "mtime": os.path.getmtime(full),
+                })
     files.sort(key=lambda x: x["mtime"], reverse=True)
     return files
 

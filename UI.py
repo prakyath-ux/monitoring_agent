@@ -1054,7 +1054,8 @@ elif page == "Reports":
 
     reports_path = Path(REPORTS_DIR)
     if reports_path.exists():
-        report_files = sorted(reports_path.glob("*.md"), reverse=True)
+        # Activity reports only — architecture_*.md belongs in the Architecture page
+        report_files = sorted(reports_path.glob("report_*.md"), reverse=True)
 
         if report_files:
             for report_file in report_files:
