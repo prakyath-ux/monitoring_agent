@@ -632,7 +632,6 @@ if agents:
     # Load team definitions
     teams = load_teams()
 
-    # Filter agents by team before loading (so leads only see their team loading)
     logged_in_user = st.session_state.get("logged_in_user", "development")
     user_team_map = {
         "frontend": "Frontend",
@@ -640,70 +639,61 @@ if agents:
         "mobile": "Mobile",
         "AI": "AI",
     }
-    if logged_in_user != "development":
-        user_team = user_team_map.get(logged_in_user, "")
-        if user_team:
-            agents = [a for a in agents if get_team_for_agent(a, teams)[0] == user_team]
 
-    # ── Run checks ──
+    # ── Team filter (rendered BEFORE the ping loop so we only ping the
+    # selected team, not the entire fleet) ──
+    st.subheader("Fleet Status")
+    if logged_in_user == "development":
+        all_teams = ["All"] + list(teams.keys()) + ["Unassigned"]
+        selected_team = st.selectbox("Filter by Team", all_teams, index=0, key="team_filter")
+    else:
+        selected_team = user_team_map.get(logged_in_user, "Unassigned")
+        st.markdown(f"**Team: {selected_team}**")
+
+    # Apply team filter to the agent list BEFORE the network checks so only
+    # the selected team gets pinged. This is the difference between waiting
+    # ~3s (for a single team of 10) vs ~60s (the entire fleet of 70).
+    if selected_team != "All":
+        agents = [a for a in agents if get_team_for_agent(a, teams)[0] == selected_team]
+
+    # ── Run checks (per-agent progress bar so leads can see what's loading) ──
     results = []
-    # Show progress only on first/uncached load. Cache hits return instantly,
-    # so a snappy spinner is enough — no need to flash every dev's name.
-    with st.spinner(f"Loading fleet status ({len(agents)} agents)..."):
-        for agent in agents:
-            ip = extract_ip(agent.get("network_url", ""))
-            url = agent.get("network_url", "")
+    progress = st.progress(0, text="Collecting data from developer machines...")
+    for i, agent in enumerate(agents):
+        ip = extract_ip(agent.get("network_url", ""))
+        url = agent.get("network_url", "")
 
-            # Cached network check — re-pings only when 60s TTL expires
-            is_online, latency, dashboard_alive = check_agent_network(ip, url)
+        # Cached network check — re-pings only when 60s TTL expires
+        is_online, latency, dashboard_alive = check_agent_network(ip, url)
 
-            if is_online:
-                net_status = "online"
-            elif dashboard_alive:
-                net_status = "firewall"
-            else:
-                net_status = "offline"
+        if is_online:
+            net_status = "online"
+        elif dashboard_alive:
+            net_status = "firewall"
+        else:
+            net_status = "offline"
 
-            team_name, display_name = get_team_for_agent(agent, teams)
-            results.append({
-                "developer": display_name,
-                "dev_name_raw": agent.get("dev_name", ""),
-                "project": agent.get("project_name", "—"),
-                "machine": agent.get("machine", "—"),
-                "ip": ip or "—",
-                "online": is_online,
-                "net_status": net_status,
-                "latency": latency,
-                "dashboard": dashboard_alive,
-                "url": url,
-                "team": team_name
-            })
+        team_name, display_name = get_team_for_agent(agent, teams)
+        results.append({
+            "developer": display_name,
+            "dev_name_raw": agent.get("dev_name", ""),
+            "project": agent.get("project_name", "—"),
+            "machine": agent.get("machine", "—"),
+            "ip": ip or "—",
+            "online": is_online,
+            "net_status": net_status,
+            "latency": latency,
+            "dashboard": dashboard_alive,
+            "url": url,
+            "team": team_name
+        })
+
+        pct = int(((i + 1) / max(len(agents), 1)) * 100)
+        progress.progress((i + 1) / max(len(agents), 1),
+                          text=f"Collecting: {agent.get('machine', '')} - {agent.get('project_name', '')} ({pct}%)")
+    progress.empty()
 
     st.markdown("---")
-
-    # ── Fleet Table ──
-    st.subheader("Fleet Status")
-
-    # Team filter — auto-filter by logged-in user's team
-    logged_in_user = st.session_state.get("logged_in_user", "development")
-    user_team_map = {
-        "frontend": "Frontend",
-        "backend": "Backend",
-        "mobile": "Mobile",
-        "AI": "AI",
-    }
-
-    if logged_in_user == "development":
-        # Development sees all teams with filter
-        all_teams = ["All"] + list(teams.keys()) + ["Unassigned"]
-        selected_team = st.selectbox("Filter by Team", all_teams, index=0)
-        if selected_team != "All":
-            results = [r for r in results if r["team"] == selected_team]
-    else:
-        # Other leads see only their team
-        team_name = user_team_map.get(logged_in_user, "Unassigned")
-        st.markdown(f"**Team: {team_name}**")
-        results = [r for r in results if r["team"] == team_name]
 
     # ── Summary Metrics (after filter) ──
     unique_machines = len(set(r["ip"] for r in results if r["ip"] != "—"))
