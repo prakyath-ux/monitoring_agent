@@ -429,6 +429,16 @@ def is_port_in_use(port):
 if not is_port_in_use(API_PORT):
     threading.Thread(target=start_api, daemon=True).start()
 
+@st.cache_data(ttl=60, show_spinner=False)
+def check_agent_network(ip, url):
+    """Combined network check for one agent. Cached for 60s so navigation /
+    button clicks don't re-ping every agent across the fleet on every rerun.
+    Returns (is_online, latency_ms, dashboard_alive)."""
+    is_online, latency = ping_host(ip) if ip else (False, 0)
+    dashboard_alive = check_dashboard(url) if url else False
+    return is_online, latency, dashboard_alive
+
+
 def ping_host(ip, timeout=1):
     """Ping an IP address, return (alive, latency_ms)"""
     flag = "-n" if platform.system() == "Windows" else "-c"
@@ -637,45 +647,37 @@ if agents:
 
     # ── Run checks ──
     results = []
-    progress = st.progress(0, text="Collecting data from developer machines...")
+    # Show progress only on first/uncached load. Cache hits return instantly,
+    # so a snappy spinner is enough — no need to flash every dev's name.
+    with st.spinner(f"Loading fleet status ({len(agents)} agents)..."):
+        for agent in agents:
+            ip = extract_ip(agent.get("network_url", ""))
+            url = agent.get("network_url", "")
 
-    for i, agent in enumerate(agents):
-        ip = extract_ip(agent.get("network_url", ""))
-        url = agent.get("network_url", "")
+            # Cached network check — re-pings only when 60s TTL expires
+            is_online, latency, dashboard_alive = check_agent_network(ip, url)
 
-        # Ping
-        is_online, latency = ping_host(ip) if ip else (False, 0)
+            if is_online:
+                net_status = "online"
+            elif dashboard_alive:
+                net_status = "firewall"
+            else:
+                net_status = "offline"
 
-        # Dashboard check — try even if ping fails (firewall may block ping)
-        dashboard_alive = check_dashboard(url) if url else False
-
-        # Determine network status
-        if is_online:
-            net_status = "online"
-        elif dashboard_alive:
-            net_status = "firewall"  # ping blocked but dashboard reachable
-        else:
-            net_status = "offline"
-
-        team_name, display_name = get_team_for_agent(agent, teams)
-        results.append({
-            "developer": display_name,
-            "dev_name_raw": agent.get("dev_name", ""),
-            "project": agent.get("project_name", "—"),
-            "machine": agent.get("machine", "—"),
-            "ip": ip or "—",
-            "online": is_online,
-            "net_status": net_status,
-            "latency": latency,
-            "dashboard": dashboard_alive,
-            "url": url,
-            "team": team_name
-        })
-
-        pct = int(((i + 1) / len(agents)) * 100)
-        progress.progress((i + 1) / len(agents), text=f"Collecting data: {agent.get('machine', '')} - {agent.get('project_name', '')}  ({pct}%)")
-
-    progress.empty()
+            team_name, display_name = get_team_for_agent(agent, teams)
+            results.append({
+                "developer": display_name,
+                "dev_name_raw": agent.get("dev_name", ""),
+                "project": agent.get("project_name", "—"),
+                "machine": agent.get("machine", "—"),
+                "ip": ip or "—",
+                "online": is_online,
+                "net_status": net_status,
+                "latency": latency,
+                "dashboard": dashboard_alive,
+                "url": url,
+                "team": team_name
+            })
 
     st.markdown("---")
 
