@@ -1565,19 +1565,74 @@ ARCH_MANIFESTS = {
     "Cargo.toml", "go.mod", "Gemfile", "composer.json", "Dockerfile", "docker-compose.yml",
     ".env.example", "Makefile",
 }
+# Folders where real business logic typically lives — sampled aggressively
+ARCH_CORE_CODE_DIRS = {
+    "src", "lib", "app", "core", "internal", "pkg", "api",
+    "services", "service", "controllers", "controller", "models", "model",
+    "routes", "router", "handlers", "handler", "views", "view",
+    "components", "modules", "domain", "repository", "repositories",
+    "backend", "server",
+    "main",  # Java: src/main/java
+}
+ARCH_SOURCE_EXTS = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".kt", ".kts", ".go",
+    ".rs", ".rb", ".cs", ".cpp", ".c", ".h", ".php", ".scala", ".swift",
+}
+ARCH_DOC_FILES = {"readme.md", "readme.rst", "readme.txt", "readme"}
 
-def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars=2000):
-    """Walk the project and build a compact architecture summary for the LLM.
+def _path_contains_core_dir(rel_path):
+    """Return True if any segment of rel_path is a known core-code dir name."""
+    parts = rel_path.replace("\\", "/").lower().split("/")
+    return any(p in ARCH_CORE_CODE_DIRS for p in parts)
 
-    Returns a string with: directory tree, language breakdown, entry points,
-    manifest contents (truncated), and top-level configs.
+
+def _extract_py_signatures(source):
+    """Best-effort: pull top-level class + function signatures from Python source.
+    Returns a list of one-line strings. Empty list if parse fails."""
+    try:
+        import ast
+        tree = ast.parse(source)
+    except Exception:
+        return []
+    out = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = ", ".join(a.arg for a in node.args.args)
+            out.append(f"def {node.name}({args})")
+        elif isinstance(node, ast.ClassDef):
+            bases = ", ".join(getattr(b, "id", "?") for b in node.bases)
+            out.append(f"class {node.name}({bases})" if bases else f"class {node.name}")
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    args = ", ".join(a.arg for a in child.args.args)
+                    out.append(f"  - {child.name}({args})")
+    return out[:30]  # cap output
+
+
+def build_architecture_summary(max_depth=4, max_files_per_dir=20,
+                                manifest_chars=2000,
+                                code_sample_lines=80,
+                                code_max_files=30,
+                                code_max_file_bytes=100_000,
+                                readme_chars=1500):
+    """Walk the project and build a code-focused architecture summary for the LLM.
+
+    Returns a string with:
+      - directory tree
+      - language breakdown
+      - entry points (with sampled code)
+      - CORE CODE SAMPLES from src/ services/ controllers/ etc. (the primary subject)
+      - manifests
+      - supplementary readme content
     """
     ignore_patterns = load_ignore_patterns()
 
     tree_lines = []
     ext_counts = {}
-    entry_points = []
+    entry_points = []          # list of (relpath, sampled_code, signatures)
     manifests = {}
+    core_code_candidates = []  # list of (size, relpath, abspath) — files in core dirs, source ext
+    readmes = {}
     largest_files = []
     total_files = 0
 
@@ -1614,9 +1669,11 @@ def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars
             ext_counts[ext] = ext_counts.get(ext, 0) + 1
             total_files += 1
 
-            # Entry point detection
+            relpath = os.path.relpath(fpath, project_root)
+
+            # Entry point detection — store path for later sampling
             if fname in ARCH_ENTRY_POINTS:
-                entry_points.append(os.path.relpath(fpath, project_root))
+                entry_points.append(relpath)
 
             # Manifest detection (read truncated content)
             if fname in ARCH_MANIFESTS and len(manifests) < 12:
@@ -1624,16 +1681,32 @@ def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars
                     content = Path(fpath).read_text(encoding="utf-8", errors="replace")
                     if len(content) > manifest_chars:
                         content = content[:manifest_chars] + "\n... (truncated)"
-                    manifests[os.path.relpath(fpath, project_root)] = content
+                    manifests[relpath] = content
+                except Exception:
+                    pass
+
+            # README detection — supplementary context only
+            if fname.lower() in ARCH_DOC_FILES and len(readmes) < 4:
+                try:
+                    content = Path(fpath).read_text(encoding="utf-8", errors="replace")
+                    if len(content) > readme_chars:
+                        content = content[:readme_chars] + "\n... (truncated)"
+                    readmes[relpath] = content
                 except Exception:
                     pass
 
             # Track size for largest files
             try:
                 size = os.path.getsize(fpath)
-                largest_files.append((size, os.path.relpath(fpath, project_root)))
+                largest_files.append((size, relpath))
             except Exception:
-                pass
+                size = 0
+
+            # Core-code candidate detection: source file inside a core dir
+            if (ext in ARCH_SOURCE_EXTS
+                    and _path_contains_core_dir(relpath)
+                    and size < code_max_file_bytes):
+                core_code_candidates.append((size, relpath, fpath))
 
         # Show only first N files per directory in tree
         for fname in kept_files[:max_files_per_dir]:
@@ -1643,11 +1716,52 @@ def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars
             indent = "  " * (depth + 1)
             tree_lines.append(f"{indent}... ({len(kept_files) - max_files_per_dir} more files)")
 
-    # Top 10 largest source files (excludes binaries by extension)
-    src_exts = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".kt", ".go", ".rs", ".rb", ".cs", ".cpp", ".c", ".h"}
-    largest_files = [(s, p) for s, p in largest_files if Path(p).suffix.lower() in src_exts]
+    # Top largest source files overall (used if no core-dir files found)
+    largest_files = [(s, p) for s, p in largest_files if Path(p).suffix.lower() in ARCH_SOURCE_EXTS]
     largest_files.sort(reverse=True)
     top_largest = largest_files[:10]
+
+    # Pick code samples — prefer core-dir files (largest first)
+    core_code_candidates.sort(reverse=True)
+    chosen_for_sampling = core_code_candidates[:code_max_files]
+
+    # Fallback: if no core-dir source files found, sample the project's largest
+    # source files instead (handles flat-layout projects like single-file agents,
+    # CLI tools, scripts at root, etc.)
+    fallback_used = False
+    if not chosen_for_sampling and largest_files:
+        fallback_used = True
+        for size, relpath in largest_files[:code_max_files]:
+            if size >= code_max_file_bytes:
+                continue
+            abs_p = os.path.join(project_root, relpath)
+            chosen_for_sampling.append((size, relpath, abs_p))
+
+    # Always sample entry points too (different list, no overlap by path)
+    chosen_paths = {p for _, p, _ in chosen_for_sampling}
+    entry_point_samples = []
+    for ep in entry_points[:5]:
+        if ep in chosen_paths:
+            continue
+        try:
+            abs_p = os.path.join(project_root, ep)
+            text = Path(abs_p).read_text(encoding="utf-8", errors="replace")
+            head = "\n".join(text.splitlines()[:code_sample_lines])
+            sigs = _extract_py_signatures(text) if ep.endswith(".py") else []
+            entry_point_samples.append((ep, head, sigs))
+        except Exception:
+            pass
+
+    # Read code samples for chosen core-dir files
+    code_samples = []  # list of (relpath, size, head, signatures)
+    for size, relpath, fpath in chosen_for_sampling:
+        try:
+            text = Path(fpath).read_text(encoding="utf-8", errors="replace")
+            head = "\n".join(text.splitlines()[:code_sample_lines])
+            sigs = _extract_py_signatures(text) if relpath.endswith(".py") else []
+            code_samples.append((relpath, size, head, sigs))
+        except Exception:
+            continue
 
     # Language breakdown (sorted by count)
     lang_lines = []
@@ -1675,10 +1789,54 @@ def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars
     else:
         parts.append("  (none detected)")
     parts.append("")
-    parts.append("## Largest Source Files")
+
+    # Entry point code samples
+    if entry_point_samples:
+        parts.append("## Entry Point Code (first lines)")
+        for ep, head, sigs in entry_point_samples:
+            parts.append(f"### {ep}")
+            if sigs:
+                parts.append("Top-level definitions:")
+                for s in sigs:
+                    parts.append(f"  {s}")
+                parts.append("")
+            parts.append("```")
+            parts.append(head)
+            parts.append("```")
+            parts.append("")
+
+    # PRIMARY SUBJECT: core code samples
+    parts.append("## CORE CODE SAMPLES (primary subject of analysis)")
+    if fallback_used:
+        parts.append("This project keeps its source files at the project root (no conventional "
+                     "src/ or services/ folder). Sampling the largest source files as the primary "
+                     "subject — these represent the actual application logic.")
+    else:
+        parts.append("These are source files in conventional logic folders (src/, services/, "
+                     "controllers/, models/, routes/, handlers/, core/, etc.). "
+                     "These represent the actual application logic and should be the focus.")
+    parts.append("")
+    if code_samples:
+        for relpath, size, head, sigs in code_samples:
+            parts.append(f"### {relpath} ({size:,} bytes)")
+            if sigs:
+                parts.append("Top-level definitions:")
+                for s in sigs:
+                    parts.append(f"  {s}")
+                parts.append("")
+            parts.append("```")
+            parts.append(head)
+            parts.append("```")
+            parts.append("")
+    else:
+        parts.append("(No source code files found in this project — analysis will be limited to structure.)")
+        parts.append("")
+
+    parts.append("## Largest Source Files (overall, for reference)")
     for size, path in top_largest:
         parts.append(f"  - {path} ({size:,} bytes)")
     parts.append("")
+
     parts.append("## Manifest / Config Files")
     for path, content in manifests.items():
         parts.append(f"### {path}")
@@ -1686,6 +1844,18 @@ def build_architecture_summary(max_depth=4, max_files_per_dir=20, manifest_chars
         parts.append(content)
         parts.append("```")
         parts.append("")
+
+    # SUPPLEMENTARY: README/docs — NOT the primary subject
+    if readmes:
+        parts.append("## Supplementary: README / docs (background context only)")
+        parts.append("These are documentation files. They provide context about INTENT but should NOT be the focus of the critique.")
+        parts.append("")
+        for path, content in readmes.items():
+            parts.append(f"### {path}")
+            parts.append("```")
+            parts.append(content)
+            parts.append("```")
+            parts.append("")
 
     return "\n".join(parts)
 
@@ -1710,14 +1880,31 @@ class ArchitectureEngine:
 
         system_prompt = """You are RepoAgent's Principal Architecture Analyst.
 
-You are given a project's directory tree, manifests, entry points, and a stated purpose. Your job is to produce a single architecture-critique report that explains HOW the project is structured, WHAT each piece does, WHY it looks this way, whether it ALIGNS with the stated purpose, and where the architectural leaks/flaws/misalignments are.
+You are given a project snapshot containing: directory tree, language breakdown, entry points, **actual source code samples from the project's logic folders (src/, services/, controllers/, models/, routes/, handlers/, core/, etc.)**, manifests, and supplementary README content.
 
-Tone: a senior architect reviewing a colleague's project. Honest, specific, constructive. Applaud what is genuinely good; critique what is genuinely off. Never invent files or modules that you cannot see in the input.
+Your job is to produce a single architecture-critique report that explains HOW the project is structured, WHAT each piece does, WHY it looks this way, whether it ALIGNS with the stated purpose, and where the architectural leaks/flaws/misalignments are.
+
+**WHAT TO FOCUS ON (in priority order):**
+1. **The CORE CODE SAMPLES section** — this is the primary subject. The class/function signatures, imports, and code patterns here tell you what the application actually does. Reason about responsibilities, coupling, layering, naming, and design patterns from these samples.
+2. **The entry points and their first lines** — these tell you the runtime shape (web server, CLI, worker, etc.) and the wiring.
+3. **Manifests** — for dependency truth and tech stack inference.
+4. **Directory tree / language breakdown** — for the overall shape and scale.
+5. **README / docs (supplementary)** — context about intent only. **Do NOT make the critique about README quality.** Do not pad strengths with documentation observations. Documentation comments belong only if they're structurally significant (e.g. a misleading README that contradicts code).
+
+**WHAT TO COMMENT ON IN THE CRITIQUE:**
+- Specific class and function names from the code samples — e.g. "the `OrderService.process()` method in `src/services/order_service.py` directly calls the database, bypassing the repository layer."
+- Architectural patterns observed: MVC, layered, hexagonal, microservice, event-driven — be specific about evidence.
+- Coupling between modules: which services call which, where dependencies are tight.
+- Separation of concerns: are routes/controllers/services/repositories actually separated, or is logic leaking across layers?
+- Error handling, logging, dependency injection — but only where visible in the samples.
+- DO NOT critique what you cannot see. If a sample is a partial file (first 80 lines), don't claim a function is missing — say "based on the visible portion".
+
+Tone: a senior architect reviewing a colleague's project. Honest, specific, constructive. Applaud what is genuinely good in the **code**; critique what is genuinely off in the **code**. Never invent files, classes, or functions that aren't visible in the snapshot.
 
 Output strict Markdown with these EXACT section headers (used for parsing):
 
 ## OVERVIEW
-A 3-5 sentence plain-English description of what this project does, based on the structure and manifests. State the inferred tech stack. If the inference is uncertain, say so.
+A 3-5 sentence plain-English description of what this project does, **based on what the actual code samples reveal** (not just the README). State the inferred tech stack from imports/manifests. If the inference is uncertain, say so.
 
 ## ARCHITECTURE FLOW
 A Mermaid diagram showing the runtime/logical architecture — the major components and HOW THEY CALL OR FLOW INTO EACH OTHER. This is NOT a folder tree. Reason about the code first, then draw the diagram.
@@ -1761,24 +1948,25 @@ Do NOT include an ASCII tree version. Do NOT just list folders. The system rende
 Quote 1-2 lines from purpose.md, then give a verdict: ALIGNED / PARTIALLY ALIGNED / DRIFTING / VIOLATION. Justify the verdict with specific file/module evidence.
 
 ## STRENGTHS
-Bullet list. Each item: a specific architectural strength with the file/folder evidence. Be concrete (e.g. "Clear separation between `services/` and `routes/` — easy to test"). 3-6 items.
+Bullet list. Each item: a specific architectural strength **with concrete code evidence — cite class names, function names, or specific files from the CORE CODE SAMPLES**. Not generic ("good naming"); concrete ("clear separation: `OrderController` in `src/controllers/order_controller.py` only handles HTTP concerns, delegates business logic to `OrderService`"). 3-6 items. **No items about README/docs quality.**
 
 ## CONCERNS, FLAWS & LEAKS
 Bullet list. Each item formatted as:
-- **<Issue>** — <one-line description>
-  - WHERE: <file/folder>
-  - WHY IT MATTERS: <one sentence>
-  - HOW TO FIX: <one concrete suggestion>
-3-8 items. Prioritize structural issues over style.
+- **<Issue>** — <one-line description grounded in actual code evidence>
+  - WHERE: <specific file, class, or function from the samples>
+  - WHY IT MATTERS: <one sentence about real-world impact>
+  - HOW TO FIX: <one concrete refactor suggestion referencing the code>
+3-8 items. Prioritize structural / code-level issues (coupling, layering violations, missing abstractions, fat controllers, etc.) over style. **No items about README/docs unless documentation actively misleads about the code.**
 
 ## RECOMMENDATIONS
 A short prioritized list (P0 / P1 / P2). Each item: one sentence on the change + one sentence on the expected benefit. Maximum 6 items.
 
 Rules:
-- Be specific. Reference actual file and folder names from the input.
-- Never fabricate. If you don't have enough evidence, say "insufficient evidence".
+- Be specific. Reference actual **class names, function names, and file paths from the CORE CODE SAMPLES**.
+- Never fabricate. If a sample is only a partial file, say "based on visible portion".
 - No hedging fluff. No corporate speak.
-- The report goes to the developer who built this project AND their lead.
+- Do NOT critique README or documentation quality unless docs actively contradict the code.
+- The report goes to the developer who built this project AND their lead. They want to understand their CODE, not their README.
 """
 
         user_content = f"""## Stated Purpose
