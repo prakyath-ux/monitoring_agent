@@ -559,6 +559,28 @@ import requests
 
 #GSHEET_URL = "https://script.google.com/macros/s/AKfycbxkE9Ab8WK85U5RYUJ7HbxZSTPNkZV0J13eMuocOaRj1mDlUeBaRB6UGuDEOclWh40KAg/exec"
 REGISTER_URL = "http://172.16.0.146:5000/register"
+PROJECT_CONFIG_URL = "http://172.16.0.146:5000/project-config"
+
+
+def _push_project_config(file_name, content):
+    """Push an edited config file (purpose.md / rules.yaml / etc.) to the central
+    server so all other devs working on the same project_name sync to it.
+    Silent fail — the local save still succeeds; only the central copy is missed.
+    Returns True if push succeeded, False otherwise (so caller can warn user).
+    """
+    try:
+        r = requests.post(
+            PROJECT_CONFIG_URL,
+            json={
+                "project_name": _project_name,
+                "file_name": file_name,
+                "content": content,
+            },
+            timeout=5,
+        )
+        return r.status_code == 200
+    except Exception:
+        return False
 
 def register_instance():
     """Register this dashboard instance in the shared Google Sheet"""
@@ -1126,8 +1148,12 @@ elif page == "Settings":
                 with col_save:
                     if st.button("Save", key="save_config", use_container_width=True):
                         config_path.write_text(config_content)
+                        synced = _push_project_config("config.yaml", config_content)
                         st.session_state.edit_config = False
-                        st.success("Config saved")
+                        if synced:
+                            st.success("Config saved (synced to team)")
+                        else:
+                            st.warning("Config saved locally. Failed to sync to central — teammates will not see this change until next manual save.")
                         st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key="cancel_config", use_container_width=True):
@@ -1151,8 +1177,12 @@ elif page == "Settings":
                 with col_save:
                     if st.button("Save", key="save_rules", use_container_width=True):
                         rules_path.write_text(rules_content)
+                        synced = _push_project_config("rules.yaml", rules_content)
                         st.session_state.edit_rules = False
-                        st.success("Rules saved")
+                        if synced:
+                            st.success("Rules saved (synced to team)")
+                        else:
+                            st.warning("Rules saved locally. Failed to sync to central — teammates will not see this change until next manual save.")
                         st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key="cancel_rules", use_container_width=True):
@@ -1176,8 +1206,12 @@ elif page == "Settings":
                 with col_save:
                     if st.button("Save", key="save_purpose", use_container_width=True):
                         purpose_path.write_text(purpose_content)
+                        synced = _push_project_config("purpose.md", purpose_content)
                         st.session_state.edit_purpose = False
-                        st.success("Purpose saved")
+                        if synced:
+                            st.success("Purpose saved (synced to team)")
+                        else:
+                            st.warning("Purpose saved locally. Failed to sync to central — teammates will not see this change until next manual save.")
                         st.rerun()
                 with col_cancel:
                     if st.button("Cancel", key="cancel_purpose", use_container_width=True):

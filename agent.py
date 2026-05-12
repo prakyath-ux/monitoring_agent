@@ -1239,10 +1239,64 @@ def ensure_linger_enabled():
         pass
 
 
+PROJECT_CONFIG_FETCH_URL = "http://172.16.0.146:5000/project-config"
+# Map of config file basename -> local absolute path. Kept in sync with the
+# server-side whitelist in dashboard.py (PROJECT_CONFIG_ALLOWED_FILES).
+_PROJECT_CONFIG_FILES = {
+    "purpose.md": PURPOSE_FILE,
+    "rules.yaml": RULES_FILE,
+    "config.yaml": CONFIG_FILE,
+    "standards.md": STANDARDS_FILE,
+}
+
+
+def fetch_project_configs():
+    """Pull the team-authoritative copy of purpose.md / rules.yaml / etc. for
+    THIS project from the central server. Overwrites local file only if the
+    server's version is newer (by mtime) than the local one. Silent on network
+    failure — server may be down or unreachable.
+
+    Triggered on agent start and during the periodic auto-pull cycle so that
+    teammates working on the same project_name converge to a single
+    source-of-truth set of config files within a few minutes of any edit.
+    """
+    from urllib.request import urlopen
+    from urllib.parse import quote
+    project_name = os.path.basename(PROJECT_DIR)
+    if not project_name:
+        return
+    for file_name, local_path in _PROJECT_CONFIG_FILES.items():
+        try:
+            url = (
+                f"{PROJECT_CONFIG_FETCH_URL}"
+                f"?project={quote(project_name)}&file={quote(file_name)}"
+            )
+            with urlopen(url, timeout=5) as resp:
+                if resp.status != 200:
+                    continue
+                data = json.loads(resp.read().decode("utf-8"))
+            server_content = data.get("content", "")
+            server_mtime = int(data.get("mtime", 0))
+            local_p = Path(local_path)
+            local_mtime = int(local_p.stat().st_mtime) if local_p.exists() else 0
+            # Only overwrite if server is strictly newer than local
+            if server_mtime > local_mtime:
+                local_p.parent.mkdir(parents=True, exist_ok=True)
+                local_p.write_text(server_content, encoding="utf-8")
+        except Exception:
+            # Server unreachable, file not on server (404), or any other
+            # transient issue — silently move on. Periodic retry handles it.
+            continue
+
+
 def cmd_start():
     """Start the file watcher in background"""
     # Self-heal missing config files
     ensure_agent_files()
+
+    # Pull team-authoritative configs (purpose.md, rules.yaml, etc.) from
+    # central server so all devs on this project converge to the same intent
+    fetch_project_configs()
 
     # Best-effort: enable systemd user linger on Linux so service survives logout
     ensure_linger_enabled()
@@ -1339,6 +1393,12 @@ def cmd_start():
                     pass
             if time.time() - last_pull >= pull_interval:
                 last_pull = time.time()
+                # Pull team-authoritative project configs from central server
+                # so any lead-side edit reaches all devs on the same project
+                try:
+                    fetch_project_configs()
+                except Exception:
+                    pass
                 agent_home = Path(__file__).resolve().parent
                 if (agent_home / ".git").exists():
                     try:
