@@ -25,17 +25,7 @@ st.set_page_config(
 
 AGENT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents.json")
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
-PROJECT_CONFIGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "project_configs")
 API_PORT = 5000
-
-# Files that can be synced per project_name. Whitelist — any other filename
-# in a /project-config request gets rejected to prevent path traversal.
-PROJECT_CONFIG_ALLOWED_FILES = {
-    "purpose.md",
-    "rules.yaml",
-    "standards.md",
-    "config.yaml",
-}
 
 import re as _re_for_safe
 def _safe_path_part(s):
@@ -339,32 +329,6 @@ class RegisterHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"Invalid JSON")
             return
 
-        # Project config upload — lead edits purpose.md / rules.yaml etc
-        # on any dev's Streamlit, the Streamlit POSTs the new content here so
-        # all other devs on the same project can pick it up.
-        if self.path == "/project-config":
-            try:
-                project_name = body.get("project_name", "")
-                file_name = body.get("file_name", "")
-                content = body.get("content", "")
-                if not project_name or file_name not in PROJECT_CONFIG_ALLOWED_FILES:
-                    self.send_response(400)
-                    self.end_headers()
-                    self.wfile.write(b"Missing project_name or invalid file_name")
-                    return
-                proj_dir = os.path.join(PROJECT_CONFIGS_DIR, _safe_path_part(project_name))
-                os.makedirs(proj_dir, exist_ok=True)
-                with open(os.path.join(proj_dir, file_name), "w", encoding="utf-8") as f:
-                    f.write(content)
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"OK")
-            except Exception as e:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(f"Error: {e}".encode())
-            return
-
         # Report upload — separate path
         if self.path == "/upload-report":
             try:
@@ -423,41 +387,6 @@ class RegisterHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def do_GET(self):
-        # Project config fetch — agents on dev machines pull their project's
-        # latest purpose.md / rules.yaml / etc. from here on startup + during
-        # the 2-min auto-pull cycle. Path: /project-config?project=X&file=Y
-        if self.path.startswith("/project-config"):
-            try:
-                from urllib.parse import urlparse, parse_qs
-                qs = parse_qs(urlparse(self.path).query)
-                project_name = qs.get("project", [""])[0]
-                file_name = qs.get("file", [""])[0]
-                if not project_name or file_name not in PROJECT_CONFIG_ALLOWED_FILES:
-                    self.send_response(400)
-                    self.end_headers()
-                    self.wfile.write(b"Missing project or invalid file")
-                    return
-                path = os.path.join(PROJECT_CONFIGS_DIR, _safe_path_part(project_name), file_name)
-                if not os.path.exists(path):
-                    self.send_response(404)
-                    self.end_headers()
-                    self.wfile.write(b"Not found")
-                    return
-                with open(path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                mtime = int(os.path.getmtime(path))
-                resp = json.dumps({"content": content, "mtime": mtime}).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(resp)))
-                self.end_headers()
-                self.wfile.write(resp)
-            except Exception as e:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(f"Error: {e}".encode())
-            return
-
         # Serve .env keys at /env path — only to local network
         if self.path == "/env":
             client_ip = self.client_address[0]
