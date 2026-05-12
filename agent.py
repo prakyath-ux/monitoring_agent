@@ -126,11 +126,19 @@ def load_purpose():
     return "No repository purpose defined"
 
 def load_rules():
-    """ Load rules from .agent/rules.yaml """
-    if Path(RULES_FILE).exists():
+    """ Load rules from .agent/rules.yaml.
+
+    Returns None on missing file OR corrupted YAML — never raises.
+    Reports should still generate even if a dev's rules.yaml is broken.
+    """
+    if not Path(RULES_FILE).exists():
+        return None
+    try:
         with open(RULES_FILE, encoding="utf-8") as f:
             return yaml.safe_load(f)
-    return None
+    except Exception as e:
+        print(f"  Warning: rules.yaml could not be parsed ({e}). Continuing without rules.")
+        return None
 
 def load_usage():
     """Load usage data from .agent/usage/usage.json"""
