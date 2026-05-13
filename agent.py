@@ -1412,48 +1412,69 @@ def cmd_start():
                     fetch_project_configs()
                 except Exception:
                     pass
-                # Project-state self-heal (ignore.yaml + .gitignore patterns).
-                # NOTE: git pull is no longer done here — scripts/heartbeat.py
-                # (the watchdog) owns code updates. When the watchdog pulls new
-                # agent.py code, it kills this process; this loop never has to
-                # self-restart. We keep the self-heal here because it's
-                # independent of git pulls (mutates files inside the dev's
-                # project, not in ~/.agent-monitor/).
-                try:
-                    ignore_file = Path(IGNORE_FILE)
-                    if ignore_file.exists():
-                        ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
-                        required = [".agent/", "node_modules/", "venv/", ".venv/", "env/", ".git/", "__pycache__/",
-                                    ".next/", "dist/", "build/", "target/", ".gradle/", ".idea/",
-                                    "out/", "bin/", ".cache/", ".nuxt/", ".turbo/", ".vscode/",
-                                    "coverage/", ".nyc_output/", ".pytest_cache/", ".mypy_cache/",
-                                    "*.min.js", "*.map", "*.class", "*.jar", "*.war",
-                                    ".dart_tool/", ".flutter-plugins", "ios/Pods/",
-                                    "android/.gradle/", "android/build/", "*.apk", "*.ipa",
-                                    ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
-                                    "*.egg-info/", ".tox/", "htmlcov/",
-                                    ".chrome_profile/", ".playwright/", "test-results/",
-                                    "playwright-report/", ".wrangler/", "*.sqlite", "*.db"]
-                        changed = False
-                        for pattern in required:
-                            if pattern not in ignore_data:
-                                ignore_data.append(pattern)
-                                changed = True
-                        # Remove old partial .agent entries
-                        old_agent = [p for p in ignore_data if p.startswith(".agent/") and p != ".agent/"]
-                        if old_agent:
-                            ignore_data = [p for p in ignore_data if p not in old_agent]
-                            changed = True
-                        if changed:
-                            with open(str(ignore_file), "w", encoding="utf-8") as f:
-                                yaml.dump(ignore_data, f, default_flow_style=False)
-                except Exception:
-                    pass
+                agent_home = Path(__file__).resolve().parent
+                if (agent_home / ".git").exists():
+                    try:
+                        result = subprocess.run(
+                            ["git", "-C", str(agent_home), "pull", "origin", "version2"],
+                            capture_output=True, text=True, timeout=30,
+                            creationflags=subprocess.CREATE_NO_WINDOW if IS_WINDOWS else 0
+                        )
+                        # One-time fix: ensure .agent/ is in ignore.yaml (remove after 2026-04-01)
+                        # One-time fix: ensure essential patterns in ignore.yaml (remove after 2026-04-01)
+                        try:
+                            ignore_file = Path(IGNORE_FILE)
+                            if ignore_file.exists():
+                                ignore_data = yaml.safe_load(ignore_file.read_text(encoding="utf-8")) or []
+                                required = [".agent/", "node_modules/", "venv/", ".venv/", "env/", ".git/", "__pycache__/",
+                                            ".next/", "dist/", "build/", "target/", ".gradle/", ".idea/",
+                                            "out/", "bin/", ".cache/", ".nuxt/", ".turbo/", ".vscode/",
+                                            "coverage/", ".nyc_output/", ".pytest_cache/", ".mypy_cache/",
+                                            "*.min.js", "*.map", "*.class", "*.jar", "*.war",
+                                            ".dart_tool/", ".flutter-plugins", "ios/Pods/",
+                                            "android/.gradle/", "android/build/", "*.apk", "*.ipa",
+                                            ".expo/", "__MACOSX/", ".DS_Store", "Thumbs.db",
+                                            "*.egg-info/", ".tox/", "htmlcov/",
+                                            ".chrome_profile/", ".playwright/", "test-results/",
+                                            "playwright-report/", ".wrangler/", "*.sqlite", "*.db"]
+                                changed = False
+                                for pattern in required:
+                                    if pattern not in ignore_data:
+                                        ignore_data.append(pattern)
+                                        changed = True
+                                # Remove old partial .agent entries
+                                old_agent = [p for p in ignore_data if p.startswith(".agent/") and p != ".agent/"]
+                                if old_agent:
+                                    ignore_data = [p for p in ignore_data if p not in old_agent]
+                                    changed = True
+                                if changed:
+                                    with open(str(ignore_file), "w", encoding="utf-8") as f:
+                                        yaml.dump(ignore_data, f, default_flow_style=False)
+                        except Exception:
+                            pass
 
-                try:
-                    add_agent_to_gitignore()
-                except Exception:
-                    pass
+                        # One-time fix: ensure .agent/ in project .gitignore (remove after 2026-04-01)
+                        try:
+                            add_agent_to_gitignore()
+                        except Exception:
+                            pass
+
+                        # If new code was pulled, restart the agent
+                        if result.returncode == 0 and "Already up to date" not in result.stdout:
+                            print("New code detected. Restarting agent...")
+                            observer.stop()
+                            branch_watcher.stop()
+                            Path(PID_FILE).unlink(missing_ok=True)
+                            if IS_WINDOWS:
+                                subprocess.Popen(
+                                    [sys.executable] + sys.argv,
+                                    creationflags=subprocess.CREATE_NO_WINDOW
+                                )
+                                sys.exit(0)
+                            else:
+                                os.execv(sys.executable, [sys.executable] + sys.argv)
+                    except Exception:
+                        pass
     except KeyboardInterrupt:
         shutdown(None, None)
 
