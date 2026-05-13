@@ -1562,21 +1562,24 @@ def cmd_report(from_date=None, to_date=None):
     report = engine.generate_report(from_date, to_date)
 
     if report:
-        #Print report (clean, no separators — stdout is captured by UI)
-        print(report)
-
-        #save to file
+        # Save + upload FIRST so a console-encoding crash on print can't lose the report.
         Path(REPORTS_DIR).mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         report_file = Path(REPORTS_DIR) / f"report_{timestamp}.md"
         report_file.write_text(report, encoding="utf-8")
-        print(f"Report savd to: {report_file}")
 
         # Upload to central dashboard so leads can access history even when dev is offline
         try:
             upload_report_to_server(report, from_date, to_date, timestamp)
         except Exception as e:
             print(f"  Report upload skipped: {e}")
+
+        # Print report (clean, no separators — stdout is captured by UI)
+        try:
+            print(report)
+        except UnicodeEncodeError:
+            print(report.encode("ascii", errors="replace").decode("ascii"))
+        print(f"Report saved to: {report_file}")
 
 
 def upload_report_to_server(report_content, from_date, to_date, timestamp, report_type="report"):
@@ -2087,18 +2090,22 @@ def cmd_architecture():
         print("Architecture analysis returned empty.")
         return
 
-    print(report)
-
+    # Save + upload FIRST so a console-encoding crash on print can't lose the report.
     Path(REPORTS_DIR).mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     report_file = Path(REPORTS_DIR) / f"architecture_{timestamp}.md"
     report_file.write_text(report, encoding="utf-8")
-    print(f"Architecture report saved to: {report_file}")
 
     try:
         upload_report_to_server(report, None, None, timestamp, report_type="architecture")
     except Exception as e:
         print(f"  Architecture upload skipped: {e}")
+
+    try:
+        print(report)
+    except UnicodeEncodeError:
+        print(report.encode("ascii", errors="replace").decode("ascii"))
+    print(f"Architecture report saved to: {report_file}")
 
 
 def cmd_logs(date=None):
@@ -2362,6 +2369,15 @@ def cmd_check():
 # ===================================== MAIN ========================================
 
 def main():
+    # Windows consoles default to cp1252, which crashes on chars like ‑ (non-breaking hyphen)
+    # that LLMs occasionally return. Force UTF-8 so print(report) never bombs.
+    if IS_WINDOWS:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="Local Directory Monitoring Agent")
     parser.add_argument("--project-dir", help="Target project directory (default: current directory)")
     subparsers = parser.add_subparsers(dest="command", help = "Commands")
