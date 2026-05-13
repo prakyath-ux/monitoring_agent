@@ -610,9 +610,14 @@ if agents:
     st.markdown("---")
 
     # ── Summary Metrics (after filter) ──
-    unique_machines = len(set(r["ip"] for r in results if r["ip"] != "—"))
+    # A "machine" is a (developer, machine) pair — one logical device.
+    # IPs come and go via DHCP, so counting unique IPs would inflate the total
+    # every time a dev's lease rotated.
+    machine_key = lambda r: (r["developer"], r["machine"])
+    unique_machines = len({machine_key(r) for r in results if r["machine"] != "—"})
     total_projects = len(results)
-    online_machines = len(set(r["ip"] for r in results if r["net_status"] in ("online", "firewall") and r["ip"] != "—"))
+    online_machines = len({machine_key(r) for r in results
+                           if r["net_status"] in ("online", "firewall") and r["machine"] != "—"})
     dashboards_up = sum(1 for r in results if r["dashboard"])
     offline_machines = unique_machines - online_machines
 
@@ -637,11 +642,12 @@ if agents:
         return 0 if r["dashboard"] else (1 if r["net_status"] != "offline" else 2)
 
     def group_key_of(r):
-        # Group by dev + IP — each section represents one network endpoint,
-        # so Network status is consistent for all rows inside it. Same dev with
-        # multiple IPs (DHCP history) appears as separate sections, but they're
-        # placed consecutively by the sort below.
-        return f"{r['developer']}|{r['ip']}"
+        # Group by dev + machine — one logical device per section regardless
+        # of how many IPs DHCP has handed out for that machine. Each project
+        # row inside the section still shows its own last-seen IP + Online/
+        # Offline status, so a lead can still spot a project pinned to a dead
+        # IP, but it stays under the dev's single block.
+        return f"{r['developer']}|{r['machine']}"
 
     # Per-dev "best status" = lowest priority any of their projects has
     group_best_status = {}
@@ -662,7 +668,7 @@ if agents:
                 r.get('project',''))
     results.sort(key=sort_key)
 
-    # Group by dev + IP (collapse different machine-name strings for the same dev+IP)
+    # Group by dev + machine (collapses stale-IP duplicates into one section)
     from collections import OrderedDict
     grouped = OrderedDict()
     for r in results:
