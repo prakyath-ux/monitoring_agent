@@ -82,24 +82,41 @@ PRICING = {
 }
 
 def load_config():
-    """ Load agent configuration form .agents/config.yaml """
+    """ Load agent configuration from .agent/config.yaml.
 
-    if Path(CONFIG_FILE).exists():
-        with open(CONFIG_FILE, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    return {
+    Returns defaults if the file is missing or has invalid YAML syntax.
+    A corrupted config.yaml on a dev's machine should not crash report
+    generation — fall back to safe defaults and log a warning.
+    """
+    defaults = {
         "watch_extensions": [".py", ".js", ".ts", ".java", ".go"],
         "model": "gpt-4o",
         "log_retention_days": 30
     }
+    if not Path(CONFIG_FILE).exists():
+        return defaults
+    try:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return data if data else defaults
+    except Exception as e:
+        print(f"  Warning: failed to parse {CONFIG_FILE}: {e}")
+        return defaults
 
 
 def load_ignore_patterns():
-    """ Load patterns to ignore from .agent/ignore.yaml """
+    """ Load patterns to ignore from .agent/ignore.yaml.
 
+    Returns the built-in defaults if the file is missing or has invalid
+    YAML syntax. Corrupted ignore.yaml should not crash the watcher.
+    """
     if Path(IGNORE_FILE).exists():
-        with open(IGNORE_FILE, encoding="utf-8") as f:
-            return yaml.safe_load(f) or []
+        try:
+            with open(IGNORE_FILE, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            return data or []
+        except Exception as e:
+            print(f"  Warning: failed to parse {IGNORE_FILE}: {e}. Using defaults.")
         
     return [
         "node_modules/",
