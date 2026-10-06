@@ -3,6 +3,9 @@
 # Works with any IDE (IntelliJ, PyCharm, Sublime, Terminal)
 # Matches VS Code extension behavior: silent, heartbeat, auto-pull
 
+# RepoAgent is retired fleet-wide (see kill switch in agent.py). Do nothing.
+exit 0
+
 AGENT_HOME="$HOME/.agent-monitor"
 REPO_URL="https://github.com/prakyath-ux/monitoring_agent.git"
 BRANCH="version2"

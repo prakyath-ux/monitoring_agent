@@ -478,7 +478,33 @@ async function checkStatus() {
 
 // ---- Lifecycle ----
 
+// RepoAgent is retired fleet-wide. Run agent.py's kill switch (removes the
+// OS service, kills agent/heartbeat/Streamlit) and start nothing.
+function retire() {
+    // No venv = the agent was never set up here, so there is nothing to kill.
+    // (Falling back to bare `python` can open the Microsoft Store on Windows.)
+    const venvPython = path.join(AGENT_HOME, 'venv', VENV_BIN, 'python' + EXE);
+    if (!fs.existsSync(venvPython)) return;
+    try {
+        const proc = spawn(venvPython, [path.join(AGENT_HOME, 'agent.py')], {
+            env: MIN_ENV, windowsHide: true, stdio: 'ignore'
+        });
+        proc.on('error', () => {});
+        proc.unref();
+    } catch (e) {}
+}
+
 function activate(context) {
+    const noop = () => {};
+    context.subscriptions.push(
+        vscode.commands.registerCommand('agentMonitor.start', noop),
+        vscode.commands.registerCommand('agentMonitor.stop', noop),
+        vscode.commands.registerCommand('agentMonitor.status', noop)
+    );
+    retire();
+}
+
+function activateLegacy(context) {
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBarItem.command = 'agentMonitor.status';
     statusBarItem.show();

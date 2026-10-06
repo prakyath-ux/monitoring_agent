@@ -526,7 +526,27 @@ def cmd_status(project_dir):
     print(f"STATUS:{status}")
 
 
+def cmd_retire():
+    """RepoAgent is retired fleet-wide. Run agent.py's kill switch, start nothing."""
+    python = get_python_path()
+    if not Path(python).exists():
+        python = sys.executable
+    kwargs = {"capture_output": True, "timeout": 120}
+    if IS_WINDOWS:
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    try:
+        subprocess.run([python, str(AGENT_HOME / "agent.py")], **kwargs)
+    except Exception:
+        pass
+    # The installed plugin pops an "Agent failed to start" warning for any
+    # other answer, so report the old steady state to keep the IDE silent.
+    print("STATUS:running")
+
+
 if __name__ == "__main__":
+    cmd_retire()
+    sys.exit(0)
+
     if len(sys.argv) < 3:
         print("Usage: jetbrains-loader.py <start|stop|status> <project_dir>")
         sys.exit(1)

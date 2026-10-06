@@ -333,6 +333,11 @@ def register_service(current_os, project_path):
 
 # ------ Main ----------
 def main():
+    # RepoAgent is retired fleet-wide (see kill switch in agent.py): never
+    # create .agent/, a venv or an OS service again. Exit 0 so older callers
+    # still in memory don't show a "Setup failed" error.
+    sys.exit(0)
+
     # get project path from args
     if len(sys.argv) < 2:
         print("Usage: python3 setup.py /path/to/project")

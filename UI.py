@@ -1,3 +1,9 @@
+# RepoAgent is retired fleet-wide (see kill switch in agent.py). If an old
+# launcher still starts this dashboard, end the Streamlit server the moment
+# the script runs, before it can read or create anything in .agent/.
+import os as _os
+_os._exit(0)
+
 import streamlit as st
 import subprocess
 import sys

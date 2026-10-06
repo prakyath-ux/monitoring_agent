@@ -15,6 +15,101 @@ import subprocess
 IS_WINDOWS = platform.system() == "Windows"
 
 
+# ---- KILL SWITCH: RepoAgent is retired fleet-wide -------------------------
+# Every running agent pulls version2 every 2 min and re-execs itself, and
+# every IDE open runs this file too, so this is how the shutdown reaches all
+# machines. Runs before the heavy imports so a broken venv can't skip it.
+# Removes auto-start, kills every ~/.agent-monitor process, then exits.
+# Project .agent/ folders and ~/.agent-monitor are left untouched.
+SERVICE_LABEL = "agent-monitor"
+
+
+def _agent_monitor_pids():
+    """PIDs of python/streamlit processes running out of ~/.agent-monitor."""
+    pids = []
+    try:
+        if IS_WINDOWS:
+            ps_filter = ("Get-CimInstance Win32_Process -Filter 'CommandLine like ''%.agent-monitor%'' "
+                         "and (Name like ''python%'' or Name like ''streamlit%'')' "
+                         "| Select-Object -ExpandProperty ProcessId")
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_filter],
+                capture_output=True, text=True, timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            ).stdout
+            pids = [int(line) for line in out.split() if line.strip().isdigit()]
+        else:
+            out = subprocess.run(
+                ["ps", "-A", "-o", "pid=", "-o", "command="],
+                capture_output=True, text=True, timeout=10
+            ).stdout
+            for line in out.splitlines():
+                parts = line.strip().split(None, 1)
+                if len(parts) == 2 and parts[0].isdigit():
+                    cmd = parts[1].lower()
+                    exe = os.path.basename(cmd.split()[0])  # the program itself, not a shell wrapping it
+                    if ".agent-monitor" in cmd and ("python" in exe or "streamlit" in exe):
+                        pids.append(int(parts[0]))
+    except Exception:
+        pass
+    # Spare ourselves and our caller (the JetBrains loader runs us and must
+    # survive to report back, or the IDE shows an "Agent failed" warning).
+    return [p for p in pids if p not in (os.getpid(), os.getppid())]
+
+
+def retire_agent():
+    home = os.path.expanduser("~")
+    system = platform.system()
+    quiet = {"capture_output": True, "timeout": 30}
+    if IS_WINDOWS:
+        quiet["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    # 1. Remove auto-start so nothing brings the agent back after reboot/login
+    try:
+        if IS_WINDOWS:
+            subprocess.run(["schtasks", "/delete", "/tn", SERVICE_LABEL, "/f"], **quiet)
+        elif system == "Darwin":
+            plist = os.path.join(home, "Library", "LaunchAgents", f"com.{SERVICE_LABEL}.plist")
+            if os.path.exists(plist):
+                os.remove(plist)
+        else:
+            subprocess.run(["systemctl", "--user", "disable", SERVICE_LABEL], **quiet)
+            unit = os.path.join(home, ".config", "systemd", "user", f"{SERVICE_LABEL}.service")
+            if os.path.exists(unit):
+                os.remove(unit)
+            subprocess.run(["systemctl", "--user", "daemon-reload"], **quiet)
+    except Exception:
+        pass
+
+    # 2. Kill every other agent, heartbeat and Streamlit dashboard
+    for pid in _agent_monitor_pids():
+        try:
+            if IS_WINDOWS:
+                subprocess.run(["taskkill", "/PID", str(pid), "/F"], **quiet)
+            else:
+                os.kill(pid, signal.SIGKILL)
+        except Exception:
+            pass
+
+    print("RepoAgent has been retired. Monitoring is permanently disabled on this machine.")
+    sys.stdout.flush()
+
+    # 3. Unload the OS service last: if we are that service, this ends us too
+    try:
+        if system == "Darwin":
+            subprocess.run(["launchctl", "remove", f"com.{SERVICE_LABEL}"], **quiet)
+        elif not IS_WINDOWS:
+            subprocess.run(["systemctl", "--user", "stop", SERVICE_LABEL], **quiet)
+    except Exception:
+        pass
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    retire_agent()
+# ---------------------------------------------------------------------------
+
+
 def is_pid_alive(pid):
     """Check if a process is running (cross-platform)"""
     if IS_WINDOWS:

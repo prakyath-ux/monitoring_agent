@@ -1,4 +1,6 @@
 @echo off
+REM RepoAgent is retired fleet-wide (see kill switch in agent.py). Do nothing.
+exit /b 0
 REM ── Agent Monitor Startup Script (version2) ──
 REM Works with any IDE (IntelliJ, PyCharm, Sublime, Terminal)
 REM Matches VS Code extension behavior: silent, heartbeat, auto-pull

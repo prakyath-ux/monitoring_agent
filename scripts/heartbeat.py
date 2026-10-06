@@ -152,4 +152,5 @@ def heartbeat_loop():
 
 
 if __name__ == "__main__":
-    heartbeat_loop()
+    # RepoAgent is retired fleet-wide (see kill switch in agent.py). Never start.
+    raise SystemExit(0)
